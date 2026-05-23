@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lebanon EMS Coverage Analysis – AHP Model (Experimental)</title>
+    %%FOLIUM_HEAD%%
+    <style>
+%%CSS_CONTENT%%
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="map-container">
+            %%MAP_DIV%%
+        </div>
+        <div class="map-legend" aria-label="Map legend">
+            <div class="map-legend-title">Map Legend</div>
+            <div><span class="legend-swatch high"></span>High priority</div>
+            <div><span class="legend-swatch medium"></span>Medium priority</div>
+            <div><span class="legend-swatch low"></span>Low priority</div>
+            <div><span class="legend-symbol ems">+</span>Existing EMS</div>
+            <div><span class="legend-symbol proposed">+</span>Proposed site</div>
+        </div>
+        <button class="panel-toggle" id="panel-toggle-btn" title="Toggle panel">&#8250;</button>
+        <button class="candidates-map-toggle" id="candidates-map-toggle" title="Toggle proposed stations">
+            <span class="cmt-dot"></span>
+            <span class="cmt-label">Proposed Stations</span>
+        </button>
+        <div class="dashboard-panel">
+%%PANEL_HTML%%
+        </div>
+    </div>
+    <div class="selected-district-card" id="selected-district-card"></div>
+
+    <!-- ── EMS Copilot (floating button + chat panel) ─────────────────────── -->
+    <button class="copilot-fab" id="copilot-fab" title="Ask the EMS Copilot" aria-label="Open EMS Copilot" aria-expanded="false">
+        <span class="ai-glyph">AI</span>
+        <span class="badge-new">BETA</span>
+    </button>
+
+    <div class="copilot-panel" id="copilot-panel" role="dialog" aria-label="EMS Copilot">
+        <div class="copilot-header">
+            <div>
+                <div class="title"><span class="orb"></span>EMS Copilot</div>
+                <div class="sub">Ask about coverage, AHP priorities, or placement.</div>
+            </div>
+            <div class="meta">
+                <div class="copilot-status offline" id="copilot-status" title="Backend status">
+                    <span class="dot"></span><span class="copilot-status-label">offline</span>
+                </div>
+                <button class="copilot-close" id="copilot-close" title="Close">&times;</button>
+            </div>
+        </div>
+        <div class="copilot-body" id="copilot-body">
+            <div class="copilot-msg">
+                <div class="avatar">AI</div>
+                <div class="bubble">
+                    Hello — I'm your EMS Copilot. I can answer questions about districts, AHP priority rankings, comparisons, and where to place a new station.
+                    <div class="copilot-suggestions">
+                        <button class="copilot-suggestion">Which districts are highest priority?</button>
+                        <button class="copilot-suggestion">Compare Beirut and Tripoli</button>
+                        <button class="copilot-suggestion">How does the AHP model work?</button>
+                        <button class="copilot-suggestion">Where can I open an EMS center in Ras al Nabeh, Beirut?</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="copilot-footer">
+            <input id="copilot-input" class="copilot-input"
+                   placeholder="Ask about coverage, gaps, or placement…" autocomplete="off">
+            <button id="copilot-send" class="copilot-send">Send</button>
+        </div>
+    </div>
+
+    <script>
+%%JS_DATA%%
+%%JS_LOGIC%%
+    </script>
+    %%FOLIUM_SCRIPTS%%
+</body>
+</html>

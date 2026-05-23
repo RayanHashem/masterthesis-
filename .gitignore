@@ -1,0 +1,40 @@
+# Virtual environments
+venv/
+.venv/
+env/
+.env/
+
+# Python bytecode / caches
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# OS / editor cruft
+.DS_Store
+Thumbs.db
+desktop.ini
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Generated artifacts (rebuilt by running the script)
+data/phase1_ahp_dashboard.html
+data/phase1_ahp_districts.json
+data/temp_map.html
+data/road_graph_lebanon.graphml
+cache/
+
+# Excel lock files
+~$*.xlsx
+
+# Local AI / runtime
+ollama/
+*.log
+run_dashboard.log
