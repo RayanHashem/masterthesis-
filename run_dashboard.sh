@@ -7,39 +7,38 @@ echo " Lebanon EMS - AHP Dashboard + Copilot Launcher"
 echo "================================================================"
 echo ""
 
+# Use the shared venv from lebanon-ems
+PYTHON="lebanon-ems/venv/bin/python"
+
 # ---- 1) Verify venv -----------------------------------------------
-if [ ! -f "venv/bin/python" ]; then
-    echo "[ERROR] Python venv not found."
+if [ ! -f "$PYTHON" ]; then
+    echo "[ERROR] Python venv not found at lebanon-ems/venv."
     echo "Run this once to create it:"
-    echo "  python3 -m venv venv"
-    echo "  venv/bin/pip install -r requirements.txt"
+    echo "  python3 -m venv lebanon-ems/venv"
+    echo "  lebanon-ems/venv/bin/pip install -r requirements.txt"
     exit 1
 fi
 echo "[1/5] Found Python venv. OK."
 
-# ---- 2) Install missing deps if needed ----------------------------
+# ---- 2) Check deps (no install needed — venv is pre-built) --------
 echo "[2/5] Verifying dependencies..."
-venv/bin/python -c "import geopandas, folium, rasterio, osmnx, fastapi, uvicorn, pydantic" 2>/dev/null
+"$PYTHON" -c "import geopandas, folium, rasterio, osmnx" 2>/dev/null
 if [ $? -ne 0 ]; then
-    echo "      Installing missing deps from requirements.txt ..."
-    venv/bin/pip install -r requirements.txt
-    if [ $? -ne 0 ]; then
-        echo "[ERROR] pip install failed. Check your internet connection."
-        exit 1
-    fi
+    echo "[ERROR] Missing dependencies. Run: lebanon-ems/venv/bin/pip install -r requirements.txt"
+    exit 1
 fi
 echo "      OK."
 
 # ---- 3) Build the AHP dashboard HTML ------------------------------
 echo "[3/5] Building AHP dashboard HTML..."
 export PYTHONIOENCODING=utf-8
-if [ ! -f "data/road_graph_lebanon.graphml" ]; then
+if [ ! -f "lebanon-ems-ahp/data/road_graph_lebanon.graphml" ]; then
     echo "      Road graph cache missing. Skipping OpenStreetMap download."
     export LEBANON_EMS_SKIP_OSM=1
 else
     unset LEBANON_EMS_SKIP_OSM
 fi
-venv/bin/python scripts/phase1_ahp_explore.py
+"$PYTHON" lebanon-ems-ahp/scripts/phase1_ahp_explore.py
 if [ $? -ne 0 ]; then
     echo "[ERROR] Dashboard build failed. See messages above."
     exit 1
@@ -58,14 +57,14 @@ fi
 
 # ---- 5) Launch Copilot backend + open dashboard -------------------
 echo "[5/5] Starting Copilot backend on http://127.0.0.1:8000 ..."
-PYTHONIOENCODING=utf-8 venv/bin/python -m uvicorn --app-dir scripts copilot_server:app --host 127.0.0.1 --port 8000 &
+PYTHONIOENCODING=utf-8 "$PYTHON" -m uvicorn --app-dir lebanon-ems-ahp/scripts copilot_server:app --host 127.0.0.1 --port 8000 &
 BACKEND_PID=$!
 
 echo "      Waiting for backend to come up..."
 sleep 4
 
 echo "      Opening dashboard in your browser..."
-open "data/phase1_ahp_dashboard.html"
+open "lebanon-ems-ahp/data/phase1_ahp_dashboard.html"
 
 echo ""
 echo "================================================================"
