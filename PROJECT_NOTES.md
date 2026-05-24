@@ -43,20 +43,38 @@ Start-Process .\data\phase1_ahp_dashboard.html
 .\venv\Scripts\python.exe -m uvicorn --app-dir scripts copilot_server:app --host 127.0.0.1 --port 8000
 ```
 
-### Option C — macOS / Linux
+### Option C — macOS
+
+#### Option C1 — One-click launcher (recommended)
+
+1. Open **Terminal** and navigate to this folder.
+2. Run:
+   ```bash
+   bash run_dashboard.sh
+   ```
+3. The script builds the dashboard, starts the Copilot backend, and opens the dashboard in your browser automatically.
+4. Keep the Terminal window open while using the dashboard — closing it stops the Copilot backend.
+
+#### Option C2 — Manual (Terminal)
 
 ```bash
-cd lebanon-ems-ahp
-python3.13 -m venv venv
-source venv/bin/activate
-python -m pip install -r requirements.txt
+cd "/path/to/EMS project"
 
-python scripts/phase1_ahp_explore.py
-open data/phase1_ahp_dashboard.html         # macOS
-# xdg-open data/phase1_ahp_dashboard.html   # Linux
+# First-time setup
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
 
-uvicorn --app-dir scripts copilot_server:app --host 127.0.0.1 --port 8000
+# Build the dashboard
+PYTHONIOENCODING=utf-8 venv/bin/python scripts/phase1_ahp_explore.py
+
+# Open the dashboard
+open data/phase1_ahp_dashboard.html
+
+# (Optional) Start the Copilot backend in the same or a separate terminal tab
+venv/bin/python -m uvicorn --app-dir scripts copilot_server:app --host 127.0.0.1 --port 8000
 ```
+
+> **Note for Mac users:** Always use `venv/bin/python` (forward slashes), not `venv\Scripts\python` — that's Windows only.
 
 ---
 
@@ -181,6 +199,7 @@ Restore with `git checkout phaseX-complete` or, destructively,
 ```
 lebanon-ems-ahp/
 ├─ run_dashboard.bat                 # One-click Windows launcher
+├─ run_dashboard.sh                  # One-click Mac/Linux launcher
 ├─ requirements.txt                  # Python dependencies
 ├─ .gitignore
 ├─ PROJECT_NOTES.md                  # ← this file
