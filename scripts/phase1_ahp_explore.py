@@ -852,6 +852,12 @@ m = folium.Map(
 def style_district_neutral(feature):
     props = feature['properties']
     covered_10min = props.get('covered_10min', True)
+    priority = props.get('ahp_priority', 'Low')
+    ahp_colors = {
+        'High':   '#e74c3c',
+        'Medium': '#f39c12',
+        'Low':    '#27ae60',
+    }
     # Access gap: thicker red border for districts outside 10-min coverage
     if covered_10min == False:
         border_color = '#ff4444'
@@ -860,18 +866,25 @@ def style_district_neutral(feature):
         border_color = '#aaaaaa'
         border_weight = 0.8
     return {
-        'fillColor': '#334455',
+        'fillColor': ahp_colors.get(priority, '#27ae60'),
         'color': border_color,
         'weight': border_weight,
-        'fillOpacity': 0.15,
+        'fillOpacity': 0.45,
     }
 
 def highlight_district(feature):
+    props = feature['properties']
+    priority = props.get('ahp_priority', 'Low')
+    ahp_colors = {
+        'High':   '#e74c3c',
+        'Medium': '#f39c12',
+        'Low':    '#27ae60',
+    }
     return {
-        'fillColor': 'yellow',
-        'color': 'yellow',
+        'fillColor': ahp_colors.get(priority, '#27ae60'),
+        'color': '#ffffff',
         'weight': 3,
-        'fillOpacity': 0.5,
+        'fillOpacity': 0.55,
     }
 
 # Prepare district data with all needed fields (use aggregated districts to avoid duplicates)
@@ -928,11 +941,6 @@ folium.GeoJson(
     districts_for_map.to_json(),
     style_function=style_district_neutral,
     highlight_function=highlight_district,
-    tooltip=folium.GeoJsonTooltip(
-        fields=['NAME_2', 'NAME_1', 'population', 'ems_stations', 'tooltip_access_gap'],
-        aliases=['District', 'Governorate', 'Population', 'Stations', 'Access Gap'],
-        localize=True
-    ),
     popup=make_popup,
     name='District Boundaries'
 ).add_to(m)
@@ -941,6 +949,7 @@ print(f"  ✓ Added {len(districts_agg)} district boundaries")
 
 # Add EMS stations with red cross icons
 print("  Adding EMS stations...")
+ems_layer = folium.FeatureGroup(name='Existing EMS', show=True)
 for idx, row in ems_valid.iterrows():
     lat = row[lat_col]
     lon = row[lon_col]
@@ -989,9 +998,11 @@ for idx, row in ems_valid.iterrows():
             icon_anchor=(6, 6)
         ),
         popup=folium.Popup(popup_text, max_width=300)
-    ).add_to(m)
+    ).add_to(ems_layer)
 
 print(f"  ✓ Added {len(ems_valid)} EMS stations")
+
+ems_layer.add_to(m)
 
 # Add population heatmap
 print("  Adding population heatmap...")
@@ -1064,11 +1075,6 @@ folium.GeoJson(
     districts_for_map.to_json(),
     style_function=style_ahp,
     highlight_function=highlight_district,
-    tooltip=folium.GeoJsonTooltip(
-        fields=['NAME_2', 'NAME_1', 'ahp_priority', 'ahp_score', 'tooltip_access_gap'],
-        aliases=['District', 'Governorate', 'AHP Priority', 'AHP Score', 'Access Gap'],
-        localize=True
-    ),
     popup=make_popup,
 ).add_to(ahp_layer)
 ahp_layer.add_to(m)

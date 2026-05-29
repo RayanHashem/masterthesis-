@@ -799,6 +799,7 @@ function _getFoliumOverlays() {
 
 const _LAYER_META = {
     'District Boundaries':           { color: '#4a9eff', desc: 'District polygon outlines' },
+    'Existing EMS':                  { color: '#e74c3c', desc: 'Current EMS station locations' },
     'Population Heatmap':            { color: '#f39c12', desc: 'Population density heat map' },
     '10-Min Coverage (Road Time)':   { color: '#e74c3c', desc: 'Areas within 10-min drive of a station' },
     'AHP Priority (District Level)': { color: '#9b59b6', desc: 'District fill colored by AHP priority' },

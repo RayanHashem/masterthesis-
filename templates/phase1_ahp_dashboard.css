@@ -634,7 +634,7 @@ body {
 /* ── SELECTED DISTRICT CARD (floating over map) ───────────────────────────── */
 .selected-district-card {
     position: fixed;
-    bottom: 24px;
+    bottom: 96px;
     left: 20px;
     z-index: 999;
     background: var(--bg-panel);
