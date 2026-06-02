@@ -187,11 +187,13 @@ function askCopilotAboutCandidate(rank, lat, lon) {
 }
 
 function renderCandidates() {
+    classifyActiveCandidates();
     const candidates = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
+    const shown      = _visibleProposed();   // all tiers when "Show all" is on, else active tier
     const limitEl    = document.getElementById('candidates-limit');
     const limitVal   = limitEl ? limitEl.value : '10';
-    const n          = limitVal === 'all' ? candidates.length : Math.min(candidates.length, parseInt(limitVal, 10) || 10);
-    const topN       = candidates.slice(0, n);
+    const n          = limitVal === 'all' ? shown.length : Math.min(shown.length, parseInt(limitVal, 10) || 10);
+    const topN       = shown.slice(0, n);
     const threshold  = _getCurrentThreshold();
 
     const listEl = document.getElementById('candidates-list');
@@ -202,16 +204,25 @@ function renderCandidates() {
         return;
     }
 
+    const tierLabel = _activeDisplayTier().toLowerCase();
+    const scopeText = _showAllProposed
+        ? `all <b>${candidates.length}</b> proposed stations`
+        : `the <b>${tierLabel}-priority</b> proposals for the selected scenario (${shown.length} of ${candidates.length})`;
     const standardsHtml = `
         <div class="decision-standards-card">
-            <b>Placement screen:</b> candidates are ranked by hotspot population and AHP score.
+            <b>Placement rule:</b> a station is proposed only where a high-density area (≥ 2000 residents/km²) cannot be reached by any existing station within 10 minutes by road. AHP weights only rank these proposals — they do not decide where stations appear.
+            The map and list show ${scopeText}.
             Spacing uses transparent demo thresholds: 1.5 km urban, 5 km rural. Lebanese public rules do not codify EMS base spacing; licensing remains under MoPH Decision 473/2021.
             <div style="margin-top:8px;">
                 <button class="mini-action-btn" type="button" id="assess-custom-location">Assess custom location</button>
             </div>
         </div>`;
 
-    listEl.innerHTML = standardsHtml + topN.map(c => {
+    const emptyNote = topN.length === 0
+        ? `<div style="color:#666;font-size:12px;padding:8px 2px">No ${tierLabel}-priority stations under this scenario.</div>`
+        : '';
+
+    listEl.innerHTML = standardsHtml + emptyNote + topN.map(c => {
         const covered = isCandidateCovered(c, threshold);
         const tt = c.mean_travel_time != null ? c.mean_travel_time.toFixed(1) : 'N/A';
         const assessment = candidatePlacementAssessment(c);
@@ -256,23 +267,69 @@ function renderCandidates() {
     if (customBtn) customBtn.addEventListener('click', () => openCopilotWith('Assess placement in ', false));
 }
 
-/** Dims candidate markers on the map when their cluster is now covered by the threshold. */
+/** Single source of truth for which proposed stations are "needed" and how they
+ *  are tiered. Tags every active-preset candidate with c._priority (High/Medium/
+ *  Low, or null if now covered) using the same AHP-score quantiles as the
+ *  district model. Returns the list of still-needed candidates. Because the AHP
+ *  scores differ per weight preset, the High tier differs per scenario — which is
+ *  what makes each preset surface a different shortlist of stations. */
+function classifyActiveCandidates() {
+    const threshold = _getCurrentThreshold();
+    const cands = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
+    const needed = cands.filter(c => !isCandidateCovered(c, threshold));
+
+    const highPctEl = document.getElementById('threshold-high');
+    const medPctEl  = document.getElementById('threshold-medium');
+    const highPct   = highPctEl ? parseInt(highPctEl.value) / 100 : 0.20;
+    const medPct    = medPctEl  ? parseInt(medPctEl.value)  / 100 : 0.50;
+    const scores = needed.map(s => s.mean_score || 0).sort((a, b) => a - b);
+    const m = scores.length;
+    const qHigh = m ? scores[Math.max(0, Math.floor(m * (1 - highPct)))] : Infinity;
+    const qMed  = m ? scores[Math.max(0, Math.floor(m * (1 - medPct)))]  : Infinity;
+
+    cands.forEach(c => {
+        if (isCandidateCovered(c, threshold)) { c._priority = null; return; }
+        const sc = c.mean_score || 0;
+        c._priority = sc >= qHigh ? 'High' : (sc >= qMed ? 'Medium' : 'Low');
+    });
+    return needed;
+}
+
+/** Which priority tier is shown on the map / candidate list. Defaults to High,
+ *  but follows the Model-tab chip filter when the user clicks Medium/Low. */
+function _activeDisplayTier() {
+    return _modelResultFilter || 'High';
+}
+
+/** The proposed stations currently shown on the map + list: every still-needed
+ *  station when "Show all" is on, otherwise just the active tier. */
+function _visibleProposed() {
+    const cands = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
+    if (_showAllProposed) return cands.filter(c => c._priority);   // all still-needed tiers
+    const tier = _activeDisplayTier();
+    return cands.filter(c => c._priority === tier);
+}
+
+/** Shows the active selection of proposed stations on the map (High tier by
+ *  default, the chosen tier when a chip is active, or all when "Show all" is on),
+ *  hiding the rest. */
 function updateCandidateMarkers() {
     if (!candidatesLayer) return;
-    const threshold = _getCurrentThreshold();
+    classifyActiveCandidates();           // tag c._priority on the active CANDIDATES
+    const showCoords = new Set(
+        _visibleProposed().map(c => c.lat.toFixed(5) + ',' + c.lon.toFixed(5))
+    );
     candidatesLayer.eachLayer(layer => {
         const c = layer._candidateData;
         if (!c) return;
-        const covered = isCandidateCovered(c, threshold);
+        const show = showCoords.has(c.lat.toFixed(5) + ',' + c.lon.toFixed(5));
         if (layer.setOpacity) {
-            // Marker
-            layer.setOpacity(covered ? 0.25 : 1);
+            layer.setOpacity(show ? 1 : 0);
         } else if (layer.setStyle) {
-            // Circle ring
             layer.setStyle({
-                opacity:     covered ? 0.15 : 0.8,
-                fillOpacity: covered ? 0.02 : 0.07,
-                dashArray:   covered ? '4 4' : '6 4',
+                opacity:     show ? 0.8 : 0,
+                fillOpacity: show ? 0.07 : 0,
+                dashArray:   '6 4',
             });
         }
     });
@@ -385,6 +442,7 @@ function hideSelectedDistrictCard() {
 const _SEG_COLORS = ['#ffffff', '#b5b5b5', '#6e6e6e', '#d8d8d8', '#8a8a8a'];
 const _PRIORITY_FILL   = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
 let _modelResultFilter = null; // null = show top 5 all; 'High'/'Medium'/'Low' = filter
+let _showAllProposed   = true;  // default: show every proposed station regardless of tier
 
 /** Called once at init — derives/stores per-district normalised scores. */
 function initModelNormScores() {
@@ -505,19 +563,21 @@ function renderModelResults() {
     const el = document.getElementById('model-results-section');
     if (!el) return;
 
-    const counts = { High: 0, Medium: 0, Low: 0 };
-    DISTRICTS.forEach(d => { if (counts[d.ahp_priority] !== undefined) counts[d.ahp_priority]++; });
-    const hasChanges = DISTRICTS.some(d => d.ahp_priority !== d._orig_ahp_priority || Math.abs(d.ahp_score - d._orig_ahp_score) > 0.001);
-
-    const threshold = _getCurrentThreshold();
     const candidates = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
-    const neededCount  = candidates.filter(c => !isCandidateCovered(c, threshold)).length;
-    const coveredCount = candidates.length - neededCount;
 
-    const sorted = [...DISTRICTS].sort((a, b) => b.ahp_score - a.ahp_score);
-    const listDistricts = _modelResultFilter
-        ? sorted.filter(d => d.ahp_priority === _modelResultFilter)
-        : sorted.slice(0, 5);
+    // This panel is about PROPOSED STATIONS. classifyActiveCandidates() tags each
+    // still-needed station with _priority by AHP-score quantiles, so the
+    // High/Medium/Low chips always sum to the total.
+    const neededStations = classifyActiveCandidates();
+    const neededCount  = neededStations.length;
+
+    const counts = { High: 0, Medium: 0, Low: 0 };
+    neededStations.forEach(s => { if (counts[s._priority] !== undefined) counts[s._priority]++; });
+
+    const sortedStations = [...neededStations].sort((a, b) => (b.mean_score || 0) - (a.mean_score || 0));
+    const listStations = _modelResultFilter
+        ? sortedStations.filter(s => s._priority === _modelResultFilter)
+        : sortedStations.slice(0, 5);
 
     const chips = [
         { key: 'High',   label: 'High',   count: counts.High },
@@ -527,39 +587,52 @@ function renderModelResults() {
 
     el.innerHTML = `
         <div class="model-results-title">Live Results</div>
-        ${candidates.length > 0 ? `
-        <div class="model-stations-summary">
-            <span class="mss-needed">${neededCount} station${neededCount !== 1 ? 's' : ''} still needed</span>
-            ${coveredCount > 0 ? `<span class="mss-covered">${coveredCount} now covered</span>` : ''}
-        </div>` : ''}
         <div class="model-results-chips">
             ${chips.map(c => `
-                <div class="model-chip ${c.key.toLowerCase()}${_modelResultFilter === c.key ? ' active' : ''}"
+                <div class="model-chip ${c.key.toLowerCase()}${(!_showAllProposed && _modelResultFilter === c.key) ? ' active' : ''}"
                      onclick="_toggleModelFilter('${c.key}')">
                     <div class="model-chip-dot ${c.key.toLowerCase()}"></div>
                     ${c.count} ${c.label}
                 </div>`).join('')}
-            ${hasChanges ? '<span class="model-changed-badge">&#9679; Modified</span>' : ''}
+            <div class="model-chip showall${_showAllProposed ? ' active' : ''}"
+                 onclick="_toggleShowAllProposed()" title="Show every proposed station on the map regardless of priority">
+                ${_showAllProposed ? 'Showing all' : 'Show all'} (${neededCount})
+            </div>
         </div>
         <div class="model-results-list">
-            ${listDistricts.length === 0
-                ? `<div style="color:#666;font-size:12px;padding:6px 0">No districts in this tier</div>`
-                : listDistricts.map((d, i) => {
-                    const cls = d.ahp_priority.toLowerCase();
-                    const safeName = d.district_name.replace(/"/g, '&quot;');
-                    return `<div class="model-result-row" onclick="onDistrictCardClick('${safeName}')">
+            ${listStations.length === 0
+                ? `<div style="color:#666;font-size:12px;padding:6px 0">No stations in this tier</div>`
+                : listStations.map((s, i) => {
+                    const cls = (s._priority || 'Low').toLowerCase();
+                    const label = (s.district_name && s.district_name.length)
+                        ? s.district_name : ('Proposed Station #' + s.rank);
+                    const safeName = label.replace(/"/g, '&quot;');
+                    return `<div class="model-result-row" onclick="onCandidateCardClick(${s.lat}, ${s.lon})">
                         <span class="model-result-rank">${i + 1}</span>
-                        <span class="model-result-name">${d.district_name}</span>
-                        <span class="model-result-priority ${cls}">${d.ahp_priority}</span>
-                        <span class="model-result-score">${d.ahp_score.toFixed(3)}</span>
+                        <span class="model-result-name">${safeName}</span>
+                        <span class="model-result-priority ${cls}">${s._priority}</span>
+                        <span class="model-result-score">${(s.mean_score || 0).toFixed(3)}</span>
                     </div>`;
                 }).join('')}
         </div>`;
 }
 
 function _toggleModelFilter(priority) {
+    _showAllProposed = false;   // picking a tier exits "show all" mode
     _modelResultFilter = (_modelResultFilter === priority) ? null : priority;
     renderModelResults();
+    // Keep the map pins and Analysis list in sync with the selected tier.
+    updateCandidateMarkers();
+    renderCandidates();
+}
+
+/** Toggles showing every proposed station on the map/list, regardless of tier. */
+function _toggleShowAllProposed() {
+    _showAllProposed = !_showAllProposed;
+    if (_showAllProposed) _modelResultFilter = null;   // "all" overrides any tier filter
+    renderModelResults();
+    updateCandidateMarkers();
+    renderCandidates();
 }
 
 /** Renders the full Model tab content from CRITERIA_CONFIG. */
@@ -585,14 +658,19 @@ function renderModelTab() {
             </div>
         </div>`;
 
-    // ── Criterion weights ──
+    // ── Criterion weights with preset scenarios ──
     html += `
         <div class="section-header" style="margin-top:18px;">Criterion Weights</div>
-        <div class="model-note">Set any positive values — automatically normalised to 100%.</div>
+        <div class="model-note">Choose a scenario — weights update automatically.</div>
+        <div class="preset-btn-group">
+            <button class="preset-btn preset-btn-active" id="preset-balanced" onclick="applyPreset('balanced')">Balanced</button>
+            <button class="preset-btn" id="preset-access" onclick="applyPreset('access')">Access Focus</button>
+            <button class="preset-btn" id="preset-population" onclick="applyPreset('population')">Population Focus</button>
+        </div>
+        <div class="preset-notify" id="preset-notify"></div>
         <div class="model-weights-block">`;
 
     CRITERIA_CONFIG.forEach((c, i) => {
-        const defVal = c.weight;
         html += `
             <div class="model-weight-row">
                 <div class="model-weight-label-row">
@@ -602,8 +680,8 @@ function renderModelTab() {
                 <div class="model-desc">${c.description}</div>
                 <div class="model-slider-row">
                     <input type="range" class="filter-slider" id="weight-${c.id}"
-                        min="0" max="1" step="0.05" value="${defVal}"
-                        oninput="recomputeAhpScores()">
+                        min="0" max="1" step="0.05" value="${c.weight}"
+                        disabled style="opacity:0.5;pointer-events:none;">
                 </div>
             </div>`;
     });
@@ -619,33 +697,6 @@ function renderModelTab() {
     });
     html += `</div></div>`;
 
-    // ── Priority thresholds ──
-    html += `
-        <div class="section-header" style="margin-top:18px;">Priority Thresholds</div>
-        <div class="model-desc">Controls what share of districts fall into each priority tier.</div>
-        <div class="filter-group" style="margin-top:10px;">
-            <div class="model-weight-label-row">
-                <span class="filter-label" style="margin-bottom:0">High priority — top</span>
-                <span class="model-value" id="threshold-high-val">20%</span>
-            </div>
-            <div class="model-slider-row">
-                <input type="range" id="threshold-high" class="filter-slider"
-                    min="5" max="50" step="5" value="20"
-                    oninput="document.getElementById('threshold-high-val').textContent=this.value+'%'; recomputeAhpScores()">
-            </div>
-        </div>
-        <div class="filter-group">
-            <div class="model-weight-label-row">
-                <span class="filter-label" style="margin-bottom:0">Medium priority — top</span>
-                <span class="model-value" id="threshold-medium-val">50%</span>
-            </div>
-            <div class="model-slider-row">
-                <input type="range" id="threshold-medium" class="filter-slider"
-                    min="10" max="80" step="5" value="50"
-                    oninput="document.getElementById('threshold-medium-val').textContent=this.value+'%'; recomputeAhpScores()">
-            </div>
-        </div>`;
-
     // ── Reset + footer ──
     html += `
         <div class="filter-group" style="margin-top:18px;">
@@ -653,12 +704,70 @@ function renderModelTab() {
         </div>
         <div class="model-footer-note">
             <strong>Updates live:</strong> sidebar ranking, score bars, priority counts, district colors on map.<br>
-            <strong>Requires re-run:</strong> grid heatmap layers &amp; coverage polygon.<br>
-            Refreshing the page resets all values to defaults.
+            <strong>Requires re-run:</strong> grid heatmap layers &amp; coverage polygon.
         </div>`;
 
     panel.innerHTML = html;
+
     recomputeAhpScores();
+}
+
+/** Preset scenarios for criterion weights. */
+const WEIGHT_PRESETS = {
+    balanced:   { access_gap: 0.50, pop_density: 0.30, exposed_pop: 0.20 },
+    access:     { access_gap: 0.70, pop_density: 0.15, exposed_pop: 0.15 },
+    population: { access_gap: 0.20, pop_density: 0.50, exposed_pop: 0.30 },
+};
+
+function applyPreset(presetName) {
+    const preset = WEIGHT_PRESETS[presetName];
+    if (!preset) return;
+
+    // Update hidden slider values so recomputeAhpScores reads them
+    CRITERIA_CONFIG.forEach(c => {
+        const el = document.getElementById('weight-' + c.id);
+        if (el) el.value = preset[c.id];
+    });
+
+    // Update percentage labels
+    const total = Object.values(preset).reduce((s, v) => s + v, 0);
+    CRITERIA_CONFIG.forEach(c => {
+        const pctEl = document.getElementById('pct-' + c.id);
+        if (pctEl) pctEl.textContent = Math.round((preset[c.id] / total) * 100) + '%';
+    });
+
+    // Update active button styling
+    document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('preset-btn-active'));
+    const activeBtn = document.getElementById('preset-' + presetName);
+    if (activeBtn) activeBtn.classList.add('preset-btn-active');
+
+    // Swap candidates to the preset's pre-computed set
+    if (typeof CANDIDATES_BY_PRESET !== 'undefined' && CANDIDATES_BY_PRESET[presetName]) {
+        CANDIDATES = CANDIDATES_BY_PRESET[presetName];
+    }
+
+    // Switching presets clears any explicit tier filter but preserves the
+    // "show all" view (the default), so all proposed stations stay visible.
+    _modelResultFilter = null;
+
+    // Tally this preset's high-priority stations for the notification
+    classifyActiveCandidates();
+    const highCount = CANDIDATES.filter(c => c._priority === 'High').length;
+
+    // Show notification
+    const notify = document.getElementById('preset-notify');
+    if (notify) {
+        const labels = { balanced: 'Balanced', access: 'Access Focus', population: 'Population Focus' };
+        notify.textContent = labels[presetName] + ' — ' + highCount +
+            ' high-priority station' + (highCount !== 1 ? 's' : '');
+        notify.classList.remove('preset-notify-fade');
+        void notify.offsetWidth; // force reflow
+        notify.classList.add('preset-notify-fade');
+    }
+
+    recomputeAhpScores();
+    renderCandidates();
+    updateCandidateMarkers();
 }
 
 /** Resets all model controls and district data to Python-computed defaults. */
@@ -682,6 +791,9 @@ function resetModelDefaults() {
         d.ahp_priority   = d._orig_ahp_priority;
         d.norm_exposed_pop = d._orig_norm_exposed;
     });
+
+    // Reset preset to balanced
+    applyPreset('balanced');
 
     applyFilters();
     updateMapDistrictColors();

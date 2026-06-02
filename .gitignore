@@ -38,3 +38,12 @@ cache/
 ollama/
 *.log
 run_dashboard.log
+
+# Claude Code local tooling
+.claude/
+
+# Stray nested copy of the project (separate git repo, ~800 MB)
+lebanon-ems-ahp/
+
+# Old pre-AHP dashboard artifact
+data/phase1_dashboard.html

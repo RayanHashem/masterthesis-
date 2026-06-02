@@ -68,7 +68,7 @@ TEMPLATES_DIR = os.path.join(PROJECT_ROOT, 'templates')
 # Data file paths
 DISTRICTS_FILE = os.path.join(DATA_DIR, 'gadm41_LBN_2.json')
 EMS_STATIONS_FILE = os.path.join(DATA_DIR, 'EMS_Station_Locations.xlsx')
-POPULATION_RASTER_FILE = os.path.join(DATA_DIR, 'lbn_pop_2024_CN_1km_R2025A_UA_v1.tif')
+POPULATION_RASTER_FILE = os.path.join(DATA_DIR, 'lbn_pop_2025_CN_1km_R2025A_UA_v1.tif')
 OUTPUT_DASHBOARD_FILE = os.path.join(DATA_DIR, 'phase1_ahp_dashboard.html')
 
 print("=" * 80)
@@ -684,25 +684,164 @@ if len(grid_cells_gdf) > 0 and 'min_travel_time_min' in grid_cells_gdf.columns:
         grid_cells_gdf['norm_pop_density'] = _minmax(grid_cells_gdf['pop_density_effective'])
         grid_cells_gdf['norm_exposed_pop'] = _minmax(grid_cells_gdf['exposed_population_effective'])
 
-        _W1, _W2, _W3 = 0.5, 0.3, 0.2
+        # --- Compute district-level AHP per preset + one station per high-priority district ---
+        _PRESETS = {
+            'balanced':   (0.50, 0.30, 0.20),
+            'access':     (0.70, 0.15, 0.15),
+            'population': (0.20, 0.50, 0.30),
+        }
+
+        # --- Official station-proposal rule ---------------------------------
+        # Propose a station wherever a HIGH-DENSITY area (>= MIN_DENSITY_PER_KM2
+        # residents/km²) CANNOT be reached by any existing station within
+        # COVERAGE_MINUTES minutes (realistic road-network travel time).
+        # The rule alone decides WHERE a station is proposed; the AHP score only
+        # RANKS the resulting proposals — it never affects which cells qualify.
+        MIN_DENSITY_PER_KM2 = 2000   # "high-density area" gate (residents/km²)
+        COVERAGE_MINUTES    = 10     # must be reachable within this (covered_10min)
+        CLUSTER_EPS_M       = 3000   # group qualifying cells within 3 km → 1 station
+
+        def _find_candidates_by_rule(gdf, districts):
+            """Official rule: a station is proposed wherever a high-density grid
+            cell (>= MIN_DENSITY_PER_KM2 residents/km²) is NOT reachable by an
+            existing station within COVERAGE_MINUTES minutes. Qualifying cells
+            are clustered (one station per cluster) and the station is placed at
+            the population-weighted centroid. The AHP score on each grid cell
+            (already computed for the active preset) is attached only to RANK the
+            proposals — it never decides which cells qualify."""
+            from sklearn.cluster import DBSCAN
+
+            # 1) Rule gate — weight-independent: dense AND not reachable in 10 min
+            _qual = gdf[(gdf['pop_density'] >= MIN_DENSITY_PER_KM2) &
+                        (gdf['covered_10min'] == False)].copy()
+            if len(_qual) == 0:
+                return []
+
+            # Project full grid once → centroids + population for served-pop lookup
+            _all_proj = gdf.to_crs(epsg=32636)
+            _all_c    = _all_proj.geometry.centroid
+            _all_cx   = _all_c.x.values
+            _all_cy   = _all_c.y.values
+            _all_pop  = gdf['population'].values.astype(float)
+
+            # Projected centroids of the qualifying cells
+            _qual_proj = _qual.to_crs(epsg=32636)
+            _qc        = _qual_proj.geometry.centroid
+            _qx        = _qc.x.values
+            _qy        = _qc.y.values
+
+            # 2) Cluster qualifying cells into service areas (one station each)
+            _labels = DBSCAN(eps=CLUSTER_EPS_M, min_samples=1).fit_predict(
+                np.column_stack([_qx, _qy]))
+            _qual = _qual.assign(_cluster=_labels, _qx=_qx, _qy=_qy)
+
+            candidates = []
+            for _clbl, _grp in _qual.groupby('_cluster'):
+                _pops = _grp['population'].values.astype(float)
+                _gx   = _grp['_qx'].values
+                _gy   = _grp['_qy'].values
+                _ptot = _pops.sum()
+                if _ptot > 0:
+                    _cx = float(np.average(_gx, weights=_pops))
+                    _cy = float(np.average(_gy, weights=_pops))
+                else:
+                    _cx = float(_gx.mean()); _cy = float(_gy.mean())
+
+                _pt = gpd.GeoDataFrame([{'geometry': Point(_cx, _cy)}],
+                                       crs='EPSG:32636').to_crs('EPSG:4326')
+                _clon = float(_pt.geometry.x.iloc[0])
+                _clat = float(_pt.geometry.y.iloc[0])
+
+                # Coverage radius from the spread of the cluster's cells
+                _spread = np.sqrt((_gx - _cx) ** 2 + (_gy - _cy) ** 2)
+                _radius_m = int(max(1500, min(6000, float(_spread.max()) * 0.6))) \
+                    if len(_spread) > 0 else 1500
+
+                # SERVED = everyone within the station's radius;
+                # UNCOVERED = the qualifying (dense + currently unreachable) people
+                _within = ((_all_cx - _cx) ** 2 + (_all_cy - _cy) ** 2) <= _radius_m ** 2
+                _served_pop    = float(_all_pop[_within].sum())
+                _uncovered_pop = float(_grp['population'].sum())
+
+                _mean_tt = float(_grp['min_travel_time_min'].dropna().mean()) \
+                    if _grp['min_travel_time_min'].notna().any() else np.nan
+                _mean_score = float(_grp['ahp_score'].mean()) \
+                    if 'ahp_score' in _grp.columns else 0.0
+
+                # District label = the district polygon containing the station
+                _dname = ''
+                try:
+                    _hit = districts[districts.geometry.contains(Point(_clon, _clat))]
+                    if len(_hit) > 0:
+                        _dname = str(_hit.iloc[0]['NAME_2'])
+                except Exception:
+                    pass
+
+                candidates.append({
+                    'cluster_id': int(_clbl),
+                    'cluster_cells_count': int(len(_grp)),
+                    'cluster_population_sum': max(_served_pop, _uncovered_pop),
+                    'cluster_uncovered_pop_sum': _uncovered_pop,
+                    'cluster_mean_score': round(_mean_score, 3),
+                    'cluster_mean_travel_time': round(_mean_tt, 1) if not np.isnan(_mean_tt) else np.nan,
+                    'cluster_radius_m': _radius_m,
+                    'district_name': _dname,
+                    'lat': round(_clat, 5), 'lon': round(_clon, 5),
+                    'geometry': Point(_clon, _clat),
+                })
+
+            if not candidates:
+                return []
+            # 3) Rank by AHP score (weights rank, not select); uncovered pop tiebreak
+            _cand_df = pd.DataFrame(candidates).sort_values(
+                ['cluster_mean_score', 'cluster_uncovered_pop_sum'],
+                ascending=False
+            ).reset_index(drop=True)
+            _cand_df['candidate_id'] = _cand_df.index + 1
+            return _cand_df.to_dict('records')
+
+        candidates_by_preset = {}
+        candidates_gdf = None  # default preset for map layer
+
+        for _preset_name, (_W1, _W2, _W3) in _PRESETS.items():
+            # Grid-level scores (for map layers)
+            _raw_score = (
+                _W1 * grid_cells_gdf['norm_access_gap'] +
+                _W2 * grid_cells_gdf['norm_pop_density'] +
+                _W3 * grid_cells_gdf['norm_exposed_pop']
+            )
+            grid_cells_gdf['ahp_score'] = _raw_score.round(3)
+            _q80 = _raw_score.quantile(0.80)
+            _q50 = _raw_score.quantile(0.50)
+            grid_cells_gdf['ahp_priority'] = _raw_score.apply(
+                lambda s: 'High' if s >= _q80 else ('Medium' if s >= _q50 else 'Low')
+            )
+
+            # Official rule: dense (≥2000/km²) AND unreachable-in-10-min cells → stations
+            # (Locations are identical across presets — the rule is weight-independent;
+            #  only the AHP ranking differs. Weights rank the proposals, not select them.)
+            _cands = _find_candidates_by_rule(grid_cells_gdf, districts_agg)
+            candidates_by_preset[_preset_name] = _cands
+            print(f"  [{_preset_name}] W=({_W1},{_W2},{_W3}) → {len(_cands)} proposed stations "
+                  f"(rule: ≥{MIN_DENSITY_PER_KM2}/km² AND >{COVERAGE_MINUTES} min from any station)")
+
+            # Keep balanced as the default for map layers + display
+            if _preset_name == 'balanced':
+                candidates_gdf = gpd.GeoDataFrame(_cands, crs='EPSG:4326') if _cands else None
+
+        # Recompute balanced as final state for grid_cells_gdf (used by map layers)
+        _W1, _W2, _W3 = _PRESETS['balanced']
         _raw_score = (
             _W1 * grid_cells_gdf['norm_access_gap'] +
             _W2 * grid_cells_gdf['norm_pop_density'] +
             _W3 * grid_cells_gdf['norm_exposed_pop']
         )
         grid_cells_gdf['ahp_score'] = _raw_score.round(3)
-
         _q80 = _raw_score.quantile(0.80)
         _q50 = _raw_score.quantile(0.50)
-
-        def _grid_priority(score):
-            if score >= _q80:
-                return 'High'
-            elif score >= _q50:
-                return 'Medium'
-            return 'Low'
-
-        grid_cells_gdf['ahp_priority'] = _raw_score.apply(_grid_priority)
+        grid_cells_gdf['ahp_priority'] = _raw_score.apply(
+            lambda s: 'High' if s >= _q80 else ('Medium' if s >= _q50 else 'Low')
+        )
 
         _high_cells   = (grid_cells_gdf['ahp_priority'] == 'High').sum()
         _medium_cells = (grid_cells_gdf['ahp_priority'] == 'Medium').sum()
@@ -717,121 +856,14 @@ if len(grid_cells_gdf) > 0 and 'min_travel_time_min' in grid_cells_gdf.columns:
         print(f"  Medium cells: {_medium_cells:5,}  — population: {_medium_pop:,.0f}")
         print(f"  Low    cells: {_low_cells:5,}  — population: {_low_pop:,.0f}")
 
-        _top10 = grid_cells_gdf.nlargest(10, 'ahp_score')[
-            ['cell_id', 'population', 'min_travel_time_min', 'travel_time_capped', 'density_high', 'ahp_score', 'ahp_priority']
-        ]
-        print("\n  Top 10 grid cells after refinement:")
-        print(f"  {'cell_id':>8}  {'pop':>10}  {'raw_tt':>7}  {'cap_tt':>7}  {'hi_den':>6}  {'score':>7}  priority")
-        for _, _r in _top10.iterrows():
-            _raw_tt = f"{_r['min_travel_time_min']:.1f}" if pd.notna(_r['min_travel_time_min']) else "  NaN"
-            print(
-                f"  {int(_r['cell_id']):>8}  {_r['population']:>10,.0f}  {_raw_tt:>7}  "
-                f"{_r['travel_time_capped']:>7.1f}  {'YES' if _r['density_high'] else 'no':>6}  "
-                f"{_r['ahp_score']:>7.3f}  {_r['ahp_priority']}"
-            )
-
     except Exception as e:
         print(f"  ✗ Error computing grid AHP scores: {e}")
         import traceback
         traceback.print_exc()
+        candidates_by_preset = {'balanced': [], 'access': [], 'population': []}
 else:
     print("  ⚠ Skipped (grid not available or travel times missing)")
-
-# ============================================================================
-# 5i. PHASE 4.5 — HOTSPOT CLUSTERING + CANDIDATE STATION POINTS
-# ============================================================================
-print("5i. HOTSPOT CLUSTERING + CANDIDATE STATIONS (PHASE 4.5)")
-print("-" * 80)
-
-from sklearn.cluster import DBSCAN as _DBSCAN
-
-candidates_gdf = None
-
-if len(grid_cells_gdf) > 0 and 'ahp_priority' in grid_cells_gdf.columns:
-    try:
-        # Phase 4.6: population >= 200 filter prevents tiny-population remote cells
-        high_cells_gdf = grid_cells_gdf[
-            (grid_cells_gdf['ahp_priority'] == 'High') &
-            (grid_cells_gdf['population'] >= 200)
-        ].copy()
-        print(f"  High-priority cells (pop >= 200): {len(high_cells_gdf):,}")
-
-        if len(high_cells_gdf) < 5:
-            print("  ⚠ Too few High cells for clustering — skipping")
-        else:
-            _high_proj = high_cells_gdf.to_crs(epsg=32636)
-            _centroids_proj = _high_proj.geometry.centroid
-            _coords = np.column_stack([_centroids_proj.x.values, _centroids_proj.y.values])
-
-            _db = _DBSCAN(eps=3000, min_samples=5).fit(_coords)
-            high_cells_gdf = high_cells_gdf.copy()
-            high_cells_gdf['cluster_id'] = _db.labels_
-
-            _n_cluster_ids = len(set(high_cells_gdf['cluster_id']) - {-1})
-            _n_noise = int((high_cells_gdf['cluster_id'] == -1).sum())
-            print(f"  DBSCAN: {_n_cluster_ids} clusters, {_n_noise} noise cells")
-
-            _cluster_records = []
-            for _cid, _group in high_cells_gdf[high_cells_gdf['cluster_id'] >= 0].groupby('cluster_id'):
-                _cells_count = len(_group)
-                _pop_sum  = float(_group['population'].sum())
-                _uncov_pop = float(_group.loc[_group['covered_10min'] == False, 'population'].sum())
-                _mean_score  = float(_group['ahp_score'].mean())
-                _mean_travel = float(_group['min_travel_time_min'].dropna().mean()) if _group['min_travel_time_min'].notna().any() else np.nan
-
-                _grp_proj = high_cells_gdf[high_cells_gdf['cluster_id'] == _cid].to_crs(epsg=32636)
-                _grp_centroids = _grp_proj.geometry.centroid
-                _cx = _grp_centroids.x.mean()
-                _cy = _grp_centroids.y.mean()
-                _pt_utm = gpd.GeoDataFrame([{'geometry': Point(_cx, _cy)}], crs='EPSG:32636').to_crs('EPSG:4326')
-                _clon = float(_pt_utm.geometry.x.iloc[0])
-                _clat = float(_pt_utm.geometry.y.iloc[0])
-
-                # Dynamic radius: max distance from centroid to any cell, +20% buffer, clamped 1–6 km
-                _dists = np.sqrt((_grp_centroids.x - _cx)**2 + (_grp_centroids.y - _cy)**2)
-                _radius_m = int(max(1000, min(6000, float(_dists.max()) * 1.2)))
-
-                _cluster_records.append({
-                    'cluster_id':               int(_cid),
-                    'cluster_cells_count':      _cells_count,
-                    'cluster_population_sum':   _pop_sum,
-                    'cluster_uncovered_pop_sum': _uncov_pop,
-                    'cluster_mean_score':       round(_mean_score, 3),
-                    'cluster_mean_travel_time': round(_mean_travel, 1) if not np.isnan(_mean_travel) else np.nan,
-                    'cluster_radius_m':         _radius_m,
-                    'lat':  round(_clat, 5),
-                    'lon':  round(_clon, 5),
-                    'geometry': Point(_clon, _clat),
-                })
-
-            _cluster_df = pd.DataFrame(_cluster_records).sort_values(
-                ['cluster_uncovered_pop_sum', 'cluster_mean_score', 'cluster_population_sum'],
-                ascending=False
-            ).reset_index(drop=True)
-            _cluster_df['candidate_id'] = _cluster_df.index + 1
-
-            _top_n = min(10, len(_cluster_df))
-            _top_candidates = _cluster_df.head(_top_n).copy()
-            candidates_gdf = gpd.GeoDataFrame(_top_candidates, crs='EPSG:4326')
-
-            print(f"\n  Top {_top_n} candidate EMS station locations:")
-            print(f"  {'#':>2}  {'cluster':>7}  {'cells':>5}  {'pop':>10}  {'uncov_pop':>10}  {'mean_score':>10}  {'mean_trvl':>9}  lat        lon")
-            for _, _r in candidates_gdf.iterrows():
-                _tt = f"{_r['cluster_mean_travel_time']:.1f}" if pd.notna(_r['cluster_mean_travel_time']) else "   NaN"
-                print(
-                    f"  {int(_r['candidate_id']):>2}  {int(_r['cluster_id']):>7}  "
-                    f"{int(_r['cluster_cells_count']):>5}  {_r['cluster_population_sum']:>10,.0f}  "
-                    f"{_r['cluster_uncovered_pop_sum']:>10,.0f}  {_r['cluster_mean_score']:>10.3f}  "
-                    f"{_tt:>9}  {_r['lat']:.4f}  {_r['lon']:.4f}"
-                )
-
-    except Exception as e:
-        print(f"  ✗ Error during clustering: {e}")
-        import traceback
-        traceback.print_exc()
-        candidates_gdf = None
-else:
-    print("  ⚠ Skipped (grid AHP scores not available)")
+    candidates_by_preset = {'balanced': [], 'access': [], 'population': []}
 
 # ============================================================================
 # 6. CREATE FOLIUM MAP WITH COLOR-CODED DISTRICTS
@@ -858,17 +890,10 @@ def style_district_neutral(feature):
         'Medium': '#f39c12',
         'Low':    '#27ae60',
     }
-    # Access gap: thicker red border for districts outside 10-min coverage
-    if covered_10min == False:
-        border_color = '#ff4444'
-        border_weight = 2.5
-    else:
-        border_color = '#aaaaaa'
-        border_weight = 0.8
     return {
         'fillColor': ahp_colors.get(priority, '#27ae60'),
-        'color': border_color,
-        'weight': border_weight,
+        'color': '#ff4444',
+        'weight': 2,
         'fillOpacity': 0.45,
     }
 
@@ -1125,26 +1150,34 @@ if len(grid_cells_gdf) > 0 and 'ahp_priority' in grid_cells_gdf.columns:
         traceback.print_exc()
 
 # Candidate EMS station layer (Phase 4.5/4.7)
+# Build union of all preset candidates for map markers (JS will show/hide per preset)
+_all_candidates_map = {}
+for _pname, _precs in candidates_by_preset.items():
+    for _c in _precs:
+        _key = (round(float(_c['lat']), 5), round(float(_c['lon']), 5))
+        if _key not in _all_candidates_map:
+            _all_candidates_map[_key] = _c
+all_candidates_for_map = list(_all_candidates_map.values())
+
 _CANDIDATE_COLOR = '#00cec9'  # Teal — distinct from red stations and priority colors
-if candidates_gdf is not None and len(candidates_gdf) > 0:
+if len(all_candidates_for_map) > 0:
     try:
         _candidates_layer = folium.FeatureGroup(name='Suggested New EMS Stations', show=True)
-        for _, _cand in candidates_gdf.iterrows():
+        for _cand in all_candidates_for_map:
             _cid      = int(_cand['candidate_id'])
             _upop     = int(_cand['cluster_uncovered_pop_sum'])
             _score    = float(_cand['cluster_mean_score'])
             _lat      = float(_cand['lat'])
             _lon      = float(_cand['lon'])
             _radius_m = int(_cand.get('cluster_radius_m', 1500))
-            _tt_str   = f"{_cand['cluster_mean_travel_time']:.1f} min" if pd.notna(_cand['cluster_mean_travel_time']) else 'N/A'
-
-            _tooltip_text = f"Proposed Station #{_cid} | Would serve: {_upop:,} people | Avg travel time: {_tt_str}"
+            _tt_val   = _cand['cluster_mean_travel_time']
+            _tt_str   = f"{_tt_val:.1f} min" if (_tt_val is not None and not (isinstance(_tt_val, float) and np.isnan(_tt_val))) else 'N/A'
 
             _popup_html = f"""<div style="font-family:Arial,sans-serif;min-width:200px;">
                 <div style="background:{_CANDIDATE_COLOR};color:#fff;padding:6px 10px;margin:-10px -10px 8px;font-weight:bold;border-radius:3px 3px 0 0;">
                     Proposed Station #{_cid}
                 </div>
-                <b>Population served:</b> {int(_cand['cluster_population_sum']):,}<br>
+                <b>Population served:</b> {int(round(_cand['cluster_population_sum'])):,}<br>
                 <b>Currently uncovered:</b> {_upop:,}<br>
                 <b>Avg travel time:</b> {_tt_str}<br>
                 <b>Coverage radius:</b> {_radius_m:,} m<br>
@@ -1168,7 +1201,6 @@ if candidates_gdf is not None and len(candidates_gdf) > 0:
             folium.Marker(
                 location=[_lat, _lon],
                 icon=DivIcon(html=_icon_html, icon_size=(24, 34), icon_anchor=(12, 34)),
-                tooltip=_tooltip_text,
                 popup=folium.Popup(_popup_html, max_width=240),
             ).add_to(_candidates_layer)
 
@@ -1182,11 +1214,10 @@ if candidates_gdf is not None and len(candidates_gdf) > 0:
                 fill=True,
                 fill_color=_CANDIDATE_COLOR,
                 fill_opacity=0.07,
-                tooltip=_tooltip_text,
             ).add_to(_candidates_layer)
 
         _candidates_layer.add_to(m)
-        print(f"  ✓ Added Suggested New EMS Stations layer — {len(candidates_gdf)} candidates (teal, visible by default)")
+        print(f"  ✓ Added Suggested New EMS Stations layer — {len(all_candidates_for_map)} candidates across all presets (teal, visible by default)")
     except Exception as e:
         print(f"  ✗ Error adding candidate layer: {e}")
         import traceback
@@ -1432,12 +1463,12 @@ panel_html = f"""            <div class="panel-header">
 
             </div>"""
 
-# Build CANDIDATES JSON array for dashboard panel (Phase 4.7)
-candidates_data = []
-if candidates_gdf is not None and len(candidates_gdf) > 0:
-    for _, _c in candidates_gdf.iterrows():
+# Build CANDIDATES_BY_PRESET JSON for dashboard panel (Phase 4.7)
+def _build_candidates_list(records):
+    result = []
+    for _c in records:
         _mean_tt = round(float(_c['cluster_mean_travel_time']), 1) if pd.notna(_c['cluster_mean_travel_time']) else None
-        candidates_data.append({
+        result.append({
             'rank':                 int(_c['candidate_id']),
             'cluster_id':          int(_c['cluster_id']),
             'lat':                  round(float(_c['lat']), 5),
@@ -1448,8 +1479,17 @@ if candidates_gdf is not None and len(candidates_gdf) > 0:
             'mean_score':          round(float(_c['cluster_mean_score']), 3),
             'mean_travel_time':    _mean_tt,
             'radius_m':            int(_c.get('cluster_radius_m', 1500)),
+            'district_name':       _c.get('district_name', ''),
         })
-candidates_json = json.dumps(candidates_data)
+    return result
+
+candidates_by_preset_json = {}
+for _pname, _precs in candidates_by_preset.items():
+    candidates_by_preset_json[_pname] = _build_candidates_list(_precs)
+
+all_presets_json = json.dumps(candidates_by_preset_json)
+# CANDIDATES defaults to the balanced preset for backward compat
+balanced_json = json.dumps(candidates_by_preset_json.get('balanced', []))
 
 # Build JS data block (Python-computed constants injected into JS scope)
 js_data = f"""        const CRITERIA_CONFIG = {json.dumps(CRITERIA_CONFIG)};
@@ -1459,7 +1499,8 @@ js_data = f"""        const CRITERIA_CONFIG = {json.dumps(CRITERIA_CONFIG)};
         const GOVERNORATES = {json.dumps(governorates_list)};
         const MAX_POP = {max_population};
         const LEBANON_BOUNDS = {json.dumps(LEBANON_BOUNDS)};
-        const CANDIDATES = {candidates_json};"""
+        var CANDIDATES_BY_PRESET = {all_presets_json};
+        var CANDIDATES = {balanced_json};"""
 
 # Assemble final HTML by replacing sentinels in the template
 dashboard_html = (

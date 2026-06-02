@@ -1,0 +1,866 @@
+================================================================================
+LEBANON EMS COVERAGE GAP ANALYSIS USING THE ANALYTIC HIERARCHY PROCESS (AHP)
+MASTER'S THESIS PROJECT - RAYAN HASHEM
+COMPREHENSIVE REPORT OUTLINE & CONTENT SUMMARY
+================================================================================
+
+This document is a structured summary of the entire project. It covers every
+component: data sources, methodology, implementation, libraries, code structure,
+dashboard features, results, and limitations. Use this as input for report
+generation.
+
+================================================================================
+TABLE OF CONTENTS
+================================================================================
+
+1. Introduction & Problem Statement
+2. Literature Review & Theoretical Background
+3. Study Area
+4. Data Sources & Collection
+5. Methodology (AHP Framework)
+6. Technical Implementation
+7. System Architecture & Code Structure
+8. Dashboard Features & User Interface
+9. AI-Powered EMS Copilot
+10. Results & Findings
+11. Candidate Station Recommendations
+12. Limitations & Future Work
+13. Conclusion
+14. References & Citations
+
+================================================================================
+CHAPTER 1: INTRODUCTION & PROBLEM STATEMENT
+================================================================================
+
+- Lebanon faces significant challenges in Emergency Medical Services (EMS)
+  coverage due to uneven geographic distribution of stations, varying population
+  densities, and complex terrain.
+- There is no publicly available spatial planning tool that helps decision-makers
+  identify where new EMS stations should be placed.
+- This project develops a multi-criteria decision support system using the
+  Analytic Hierarchy Process (AHP) to evaluate and prioritize Lebanon's 26
+  districts (qadaa level) for new EMS station placement.
+- The system produces an interactive web-based dashboard with live AHP model
+  controls, an integrated AI chat assistant (EMS Copilot), and data-driven
+  candidate station recommendations.
+- All processing runs locally on the user's machine; no data leaves the device.
+
+SCREENSHOT: [Take a full-page screenshot of the dashboard showing the map with
+district colors and the right panel visible - this is the "hero" image]
+
+================================================================================
+CHAPTER 2: LITERATURE REVIEW & THEORETICAL BACKGROUND
+================================================================================
+
+2.1 Emergency Medical Services (EMS) Response Standards
+- Lebanese Red Cross / IFRC International Network Plan 2023 [LRC-9]:
+  Target = respond to 80% of emergency calls within 9 minutes.
+- Lebanese Red Cross / IFRC INP 2023 [LRC-13]:
+  Secondary target = respond to 85% of calls within 13 minutes.
+- European standard [EU-8]: 8 minutes for life-threatening (critical) calls.
+- WHO Clinical Services & Systems framework: defines ambulance base station as
+  a facility equipped for personnel and restocking.
+- Lebanese Ministry of Public Health, Karar (Decision) No. 473/2021 [MoPH-473]:
+  Licenses EMS/ambulance operators. Spatial spacing is NOT publicly codified.
+
+2.2 Analytic Hierarchy Process (AHP)
+- AHP is a structured multi-criteria decision-making (MCDM) method developed
+  by Thomas L. Saaty (1980).
+- Decomposes complex decisions into a hierarchy of criteria.
+- Allows assigning weights to criteria based on relative importance.
+- Produces a single composite score per alternative for ranking.
+- Widely used in facility location problems, healthcare planning, and
+  resource allocation.
+
+2.3 GIS in Healthcare Planning
+- Geographic Information Systems (GIS) enable spatial analysis of healthcare
+  accessibility.
+- Network analysis (road graphs) provides realistic travel time estimates
+  compared to straight-line (Euclidean) distance.
+- Combination of AHP + GIS is well-established in the literature for optimal
+  facility siting.
+
+2.4 Key Distinction: No ArcGIS Used
+- This project uses an entirely open-source geospatial stack.
+- No ESRI products (ArcGIS, ArcMap, ArcPro) are used.
+- All spatial analysis is performed with Python libraries (GeoPandas, OSMnx,
+  Shapely, Rasterio, Folium).
+
+================================================================================
+CHAPTER 3: STUDY AREA
+================================================================================
+
+- Country: Lebanon
+- Administrative level: Qadaa (district), which is admin level 2
+- Total districts analyzed: 26
+- Governorates (admin level 1): 8 — Akkar, Baalbak-Hermel, Beirut, Bekaa,
+  Mount Lebanon, Nabatiyeh, North, South
+- Urban governorates (for threshold purposes): Beirut, Mount Lebanon
+- Total EMS stations in dataset: 52
+- Total population (WorldPop 2025): approximately 5.80 million
+
+Districts analyzed (all 26):
+  Akkar, Aley, Baabda, Baalbeck, Batroun, Bcharre, Beirut, Bint Jbayl,
+  Chouf, El Metn, Hasbaya, Hermel, Jezzine, Jubail, Kasrouane, Koura,
+  Marjaayoun, Minieh-Danieh, Nabatiyeh, Rachiaya, Saida, Sour, Tripoli,
+  West Bekaa, Zahleh, Zgharta
+
+SCREENSHOT: [Take a screenshot of the map zoomed to show all of Lebanon with
+district boundaries visible and the layer control panel open]
+
+================================================================================
+CHAPTER 4: DATA SOURCES & COLLECTION
+================================================================================
+
+4.1 District Boundaries
+- Source: GADM version 4.1 (Global Administrative Areas Database)
+- URL: https://gadm.org
+- File: gadm41_LBN_2.json (GeoJSON format)
+- Contains: 26 district polygons (MultiPolygon geometry) with NAME_2 (district
+  name) and NAME_1 (governorate name)
+- Coordinate system: WGS84 (EPSG:4326)
+- Note: Some districts appear as duplicate entries in GADM (e.g., two "Batroun"
+  polygons). The pipeline dissolves these by NAME_2, summing population and
+  station counts.
+
+4.2 EMS Station Locations
+- Source: Operational dataset (EMS_Station_Locations.xlsx)
+- Format: Excel spreadsheet with latitude/longitude columns
+- Total stations: 52
+- Columns used: latitude (Y), longitude (X), station identifiers
+- Spatial join assigns each station to its containing district
+
+4.3 Population Data
+- Source: WorldPop 2025 Constrained (CN) dataset
+- URL: https://www.worldpop.org
+- File: lbn_pop_2025_CN_1km_R2025A_UA_v1.tif (GeoTIFF raster)
+- Resolution: 1 km x 1 km grid cells
+- Values: estimated persons per pixel
+- Coordinate system: WGS84 (EPSG:4326)
+- Used for: district population aggregation (zonal statistics), population
+  heatmap, grid-level AHP analysis
+
+4.4 Road Network
+- Source: OpenStreetMap (OSM) via OSMnx Python library
+- Network type: drivable roads ("drive" network type)
+- Extent: entire Lebanon bounding box
+- Cached as: road_graph_lebanon.graphml (avoids re-downloading)
+- Graph size: approximately 100K nodes, 150K edges
+- Edge attributes: length (meters), highway type, maxspeed tags
+- Travel time computed per edge using speed assumptions based on highway type
+
+4.5 Regulatory and Standards Data
+- Encoded programmatically in lebanon_ems_rules.py
+- Sources: LRC/IFRC INP 2023, MoPH Karar 473/2021, EU EMS standards, WHO
+- Not sourced from a database but from published documents and standards
+
+SCREENSHOT: [No screenshot needed for this chapter - it's about data sources]
+
+================================================================================
+CHAPTER 5: METHODOLOGY (AHP FRAMEWORK)
+================================================================================
+
+5.1 Overview
+- The AHP model evaluates each of Lebanon's 26 districts on three criteria
+  to produce a composite priority score indicating need for new EMS coverage.
+
+5.2 Decision Hierarchy
+
+  Goal: Prioritize districts for new EMS station placement
+  |
+  |-- Criterion 1: Travel-Time Gap (Accessibility)     Weight: 50%
+  |-- Criterion 2: Population Density (Demand)          Weight: 30%
+  |-- Criterion 3: Exposed Population (Equity)          Weight: 20%
+  |
+  Alternatives: 26 districts of Lebanon
+
+5.3 Criterion Definitions
+
+  Criterion 1 - Travel-Time Gap (C1) [Weight: 50%]
+  - Measures: minimum road travel time (in minutes) from the district centroid
+    to the nearest EMS station
+  - Computed via: multi-source Dijkstra shortest path on the OSM road graph
+  - Interpretation: higher travel time = worse accessibility = higher priority
+  - This is the most heavily weighted criterion because response time is the
+    primary determinant of EMS effectiveness
+
+  Criterion 2 - Population Density (C2) [Weight: 30%]
+  - Measures: people per square kilometer in the district
+  - Computed as: total population (from WorldPop zonal sum) / district area (km2)
+  - Interpretation: denser districts have more potential patients per unit area,
+    so they benefit more from a nearby station
+
+  Criterion 3 - Exposed Population (C3) [Weight: 20%]
+  - Measures: total population in districts where the nearest EMS station is
+    beyond the coverage threshold (default: 10 minutes by road)
+  - If a district IS covered (nearest station <= threshold), exposed pop = 0
+  - Interpretation: captures the absolute number of people at risk, not just
+    density or travel time
+
+5.4 Normalization
+- All three raw criterion values are min-max normalized to [0, 1]:
+  norm_value = (value - min) / (max - min)
+- This puts all criteria on the same scale before weighting
+- Normalization is computed across all 26 districts
+
+5.5 Score Formula
+  AHP_Score = 0.50 * norm_access_gap
+            + 0.30 * norm_pop_density
+            + 0.20 * norm_exposed_pop
+
+  Result: a score between 0.0 and 1.0 for each district
+  Higher score = higher priority for new EMS coverage
+
+5.6 Priority Classification
+- Districts are ranked by AHP score and classified using quantile thresholds:
+  - HIGH priority:   top 20% of scores (approximately 5-6 districts)
+  - MEDIUM priority: top 21-50% of scores (approximately 7-8 districts)
+  - LOW priority:    bottom 50% of scores (approximately 13 districts)
+- Quantile-based classification avoids fixed thresholds that could cluster
+  all districts into a single category
+
+5.7 Why These Weights?
+- Travel-time gap (50%): response time is the single most critical factor in
+  EMS effectiveness; every minute of delay reduces survival probability
+- Population density (30%): reflects demand concentration; a station in a dense
+  area serves more people per unit investment
+- Exposed population (20%): equity consideration; ensures large populations
+  beyond coverage threshold are not ignored even if density is moderate
+
+5.8 Live Model Adjustability
+- The dashboard allows users to adjust all weights via sliders in real time
+- Weights auto-normalize to 100% when any slider changes
+- Coverage threshold is also adjustable (default 10 min)
+- Priority thresholds (percentiles) can be changed
+- All scores, rankings, and map colors update instantly
+
+SCREENSHOT: [Take a screenshot of the Model tab showing the three weight
+sliders, coverage threshold slider, and priority threshold controls]
+
+SCREENSHOT: [Take a screenshot showing the Model tab "Live Results" section
+with the priority chips and top-N ranking after adjusting weights]
+
+================================================================================
+CHAPTER 6: TECHNICAL IMPLEMENTATION
+================================================================================
+
+6.1 Programming Language
+- Python 3.13 (all backend processing and data pipeline)
+- JavaScript (client-side dashboard interactivity)
+- HTML5 + CSS3 (dashboard interface)
+
+6.2 Python Libraries Used
+
+  Library          Version   Purpose
+  -------          -------   -------
+  geopandas        1.1.2     Vector geospatial data (boundaries, spatial joins)
+  pandas           3.0.1     Tabular data manipulation
+  folium           0.20.0    Interactive Leaflet.js map generation from Python
+  rasterio         1.5.0     Reading population raster (GeoTIFF)
+  numpy            2.4.2     Numerical arrays, zonal statistics
+  osmnx            2.1.0     Download/analyze OpenStreetMap road network
+  networkx         3.5       Graph algorithms (Dijkstra shortest path)
+  scikit-learn     1.8.0     DBSCAN clustering for candidate station siting
+  shapely          2.1.2     Geometric operations (buffers, centroids, intersections)
+  openpyxl         3.1.5     Reading Excel files (EMS station spreadsheet)
+  requests         2.32.5    HTTP requests (Nominatim geocoding in Copilot)
+  fastapi          0.115.0   REST API framework for EMS Copilot backend
+  uvicorn          0.30.6    ASGI server for FastAPI
+  pydantic         2.9.2     Data validation for API request/response models
+
+6.3 JavaScript Libraries (client-side, embedded via Folium)
+- Leaflet.js: interactive map rendering
+- Leaflet.heat: population heatmap layer
+
+6.4 Optional Dependencies
+- Ollama (local LLM runtime): runs qwen2.5:3b model for natural-language
+  Copilot responses
+- Not required: Copilot works in deterministic mode without it
+
+6.5 Data Processing Pipeline (phase1_ahp_explore.py - 1,538 lines)
+
+  Step 1: Load district boundaries from GADM GeoJSON
+  Step 2: Load EMS station locations from Excel
+  Step 3: Load population raster (WorldPop GeoTIFF)
+  Step 4: Spatial join - assign stations to districts
+  Step 5a: Zonal statistics - aggregate population per district from raster
+  Step 5b: Dissolve duplicate GADM districts (merge by NAME_2)
+  Step 5c: Download/load OSM road graph (cached as GraphML)
+  Step 5d: Compute travel times on road edges based on highway type and speed
+  Step 5e: Multi-source Dijkstra - find min travel time per district to
+           nearest station; compute AHP scores and classify priorities
+  Step 5f: Create 1 km grid from population raster
+  Step 5g: Compute grid-level travel times
+  Step 5h: Grid-level AHP scoring with density boost (1.2x for cells >= 2000
+           pop/km2) and 30-min travel time cap
+  Step 5i: Apply the station-proposal rule - select grid cells that are
+           high-density (>= 2000 residents/km2) AND not reachable by any
+           existing station within 10 minutes; DBSCAN-cluster these qualifying
+           cells (one proposed station per cluster). The rule alone decides
+           WHERE stations are proposed; AHP scores only rank them.
+  Step 6:  Generate interactive Folium map with all layers
+  Step 7:  Build dashboard panel HTML (KPIs, tables, filters, Copilot UI)
+  Step 8:  Inject everything into HTML template and write final dashboard
+  Step 9:  Write AHP sidecar JSON for Copilot consumption
+
+6.6 Travel Time Computation Details
+- Each road edge in the OSM graph gets a travel_time attribute
+- Speed is determined by: maxspeed tag if available, else default by highway type
+  - motorway: 100 km/h
+  - trunk: 80 km/h
+  - primary: 60 km/h
+  - secondary: 40 km/h
+  - tertiary: 30 km/h
+  - residential: 20 km/h
+  - other: 20 km/h
+- travel_time (seconds) = edge_length (meters) / (speed km/h * 1000/3600)
+- Multi-source Dijkstra starts from all EMS station nodes simultaneously
+- For each district centroid, finds the shortest travel time to any station
+
+6.7 Grid-Level Analysis
+- Population raster cells (1 km) are converted to point geometries
+- Each grid cell gets its own travel time and AHP score
+- Density boost factor: cells with >= 2000 pop/km2 get 1.2x multiplier
+- Travel time capped at 30 minutes for normalization stability
+- Grid cells enable finer spatial resolution than district-level analysis
+
+6.8 Candidate Station Identification (Rule-Based + DBSCAN Clustering)
+- Governing rule (the official placement criterion): a new station is proposed
+  wherever a HIGH-DENSITY area cannot be reached by an existing station in time:
+    1. population density >= 2000 residents/km2, AND
+    2. NOT reachable by any existing EMS station within 10 minutes
+       (realistic road-network travel time, the covered_10min flag)
+  Both conditions must hold. Density alone is not enough (a dense but already
+  covered area is not proposed), and a reachable area never receives a proposal.
+- This rule is WEIGHT-INDEPENDENT: the AHP weights do not decide where stations
+  are proposed. They only RANK the resulting proposals. Consequently the set of
+  proposed locations is identical across all weight presets; only the ranking
+  and priority tiering change.
+- Step 1 - Gate: select the 1 km grid cells satisfying both rule conditions.
+- Step 2 - Cluster: DBSCAN (Density-Based Spatial Clustering) groups the
+  qualifying cells into service areas, one proposed station per cluster.
+  - eps = 3 km (cells within ~3 km join the same station)
+  - min_samples = 1 (every qualifying cluster yields a station)
+- Step 3 - Place & summarize, per cluster:
+  - Location = population-weighted centroid of the qualifying cells
+  - Population served = total population within the station's coverage radius
+  - Uncovered population = population of the qualifying (dense + unreachable) cells
+  - Mean AHP score of the cluster cells (under the active weight preset)
+  - Coverage radius derived from the cluster's spatial spread (1.5-6 km)
+- Ranking: proposals are sorted by AHP mean score (uncovered population as a
+  tiebreak). Priority tiers (High/Medium/Low) are assigned by score quantiles.
+- Result (default "Balanced" preset): 32 proposed stations, every one of which
+  has uncovered population > 0 and a mean travel time greater than 10 minutes -
+  i.e., each proposal addresses a genuine, currently-unreachable coverage gap.
+
+SCREENSHOT: [Take a screenshot of the map showing candidate station markers
+(teal markers with coverage rings) visible]
+
+================================================================================
+CHAPTER 7: SYSTEM ARCHITECTURE & CODE STRUCTURE
+================================================================================
+
+7.1 Project File Structure
+
+  EMS project/
+  |
+  |-- run_dashboard.bat              Windows one-click launcher
+  |-- run_dashboard.sh               Mac/Linux one-click launcher
+  |-- requirements.txt               Python dependencies (14 packages)
+  |-- PROJECT_NOTES.md               User documentation
+  |-- pyrightconfig.json             Python type-checking config
+  |
+  |-- data/
+  |   |-- gadm41_LBN_2.json          District boundaries (GADM 4.1 GeoJSON)
+  |   |-- EMS_Station_Locations.xlsx  52 EMS station coordinates
+  |   |-- lbn_pop_2025_CN_1km_R2025A_UA_v1.tif  Population raster (WorldPop)
+  |   |-- road_graph_lebanon.graphml  Cached OSM road network (generated)
+  |   |-- phase1_ahp_dashboard.html   Final interactive dashboard (generated)
+  |   |-- phase1_ahp_districts.json   AHP sidecar data for Copilot (generated)
+  |
+  |-- templates/
+  |   |-- phase1_ahp_dashboard.html   HTML template shell (82 lines)
+  |   |-- phase1_ahp_dashboard.css    Monochrome stylesheet
+  |   |-- phase1_ahp_dashboard.js     Client-side JavaScript (1,223 lines)
+  |
+  |-- scripts/
+  |   |-- phase1_ahp_explore.py       Main pipeline: data -> AHP -> dashboard
+  |   |                               (1,538 lines)
+  |   |-- copilot_server.py           FastAPI Copilot backend (715 lines)
+  |   |-- lebanon_ems_rules.py        Lebanese standards & heuristics (132 lines)
+  |
+  |-- venv/                           Python virtual environment
+
+7.2 Data Flow Diagram
+
+  [GADM GeoJSON] + [Excel Stations] + [WorldPop Raster] + [OSM Roads]
+                              |
+                              v
+                 phase1_ahp_explore.py
+                 (load, join, compute, score)
+                              |
+              +---------------+----------------+
+              |                                |
+              v                                v
+  phase1_ahp_dashboard.html         phase1_ahp_districts.json
+  (interactive web dashboard)       (AHP data sidecar)
+              |                                |
+              v                                v
+  [User opens in browser]           copilot_server.py (FastAPI)
+              |                                |
+              +----------- /chat API ----------+
+              |
+              v
+  [User interacts: map, sliders, chat]
+
+7.3 Template Injection System
+- phase1_ahp_explore.py reads templates/phase1_ahp_dashboard.html (shell)
+- Replaces sentinel placeholders:
+  %%FOLIUM_HEAD%%     -> Leaflet/Folium CSS and JS includes
+  %%CSS_CONTENT%%     -> Contents of templates/phase1_ahp_dashboard.css
+  %%MAP_DIV%%         -> Folium-generated map HTML
+  %%PANEL_HTML%%      -> Dashboard panel (tabs, KPIs, tables, copilot UI)
+  %%JS_DATA%%         -> JavaScript constants (DISTRICTS, STATIONS, CANDIDATES,
+                         GOVERNORATES arrays)
+  %%JS_LOGIC%%        -> Contents of templates/phase1_ahp_dashboard.js
+  %%FOLIUM_SCRIPTS%%  -> Folium map initialization scripts
+- Output: single self-contained HTML file (~6 MB) with everything embedded
+
+7.4 Key Design Decisions
+- Single HTML file: no web server needed to view the dashboard (just open in
+  browser). Makes it portable and easy to share.
+- Monochrome UI theme: black-and-white panel design so the only color is on
+  the map, making priority colors (red/orange/green) unambiguous.
+- Local-only processing: all data stays on the user's machine. No cloud APIs,
+  no data uploads, no API keys required.
+- Deterministic + optional LLM: Copilot works without AI model installed;
+  Ollama enhances but is not required.
+
+================================================================================
+CHAPTER 8: DASHBOARD FEATURES & USER INTERFACE
+================================================================================
+
+8.1 Layout
+- Left side (60% width): interactive Folium/Leaflet map of Lebanon
+- Right side (400px fixed panel): dashboard controls and data, toggleable
+- Bottom-left: floating selected district card (appears on click)
+- Bottom-right: floating AI Copilot button and chat panel
+
+8.2 Map Layers (toggleable via Filters tab or Leaflet layer control)
+
+  Layer                     Description
+  -----                     -----------
+  District Boundaries       26 district polygons, neutral gray outline
+  AHP Priority Colors       Districts filled: red (High), orange (Medium),
+                            green (Low)
+  EMS Stations              Red cross markers at 52 station locations
+  Population Heatmap        WorldPop 1km grid as heat overlay
+  10-Min Coverage Polygon   Road-network based coverage area from all stations
+  Grid AHP Layer            1km cell-level AHP scores (color-coded)
+  Candidate Stations        Teal markers with coverage radius rings for the
+                            rule-based proposed new station locations. By
+                            default the map shows the High-priority proposals
+                            for the active weight preset; a "Show all" toggle
+                            reveals every proposed station regardless of tier.
+
+SCREENSHOT: [Take a screenshot with ONLY the district boundaries + AHP colors
+visible (other layers off) to clearly show the priority classification]
+
+SCREENSHOT: [Take a screenshot with the population heatmap layer turned on]
+
+SCREENSHOT: [Take a screenshot showing EMS station markers (red crosses)
+on the map]
+
+SCREENSHOT: [Take a screenshot showing candidate station markers (teal) with
+their coverage rings]
+
+SCREENSHOT: [Take a screenshot with the 10-min coverage polygon visible]
+
+8.3 Model Tab
+- Three weight sliders (C1: Travel-Time Gap, C2: Pop Density, C3: Exposed Pop)
+- Sliders auto-normalize: adjusting one redistributes others to sum to 100%
+- Stacked weight bar visualization showing proportions
+- Coverage threshold slider (default 10 min, adjustable)
+- Priority threshold controls (percentiles for High/Medium/Low cutoffs)
+- Selecting a weight preset (Balanced / Access Focus / Population Focus) shows a
+  notification with that scenario's high-priority proposed-station count, and
+  refreshes the map to that preset's High-priority shortlist.
+- Live Results section (describes the PROPOSED STATIONS for the active preset):
+  - Priority chips - High / Medium / Low counts of the proposed stations
+    (tiered by AHP-score quantiles, so the three counts always sum to the total)
+  - "Show all" button - reveals every proposed station on the map and list,
+    regardless of priority tier
+  - Clicking a tier chip filters both the list and the map markers to that tier
+  - Ranked list of the proposed stations with their AHP scores
+
+SCREENSHOT: [Take a screenshot of the Model tab with default weights (50/30/20)]
+
+SCREENSHOT: [Take a screenshot of the Model tab after changing weights to
+something different, e.g., 40/40/20, showing how scores update]
+
+8.4 Analysis Tab
+- 4 KPI stat cards at top:
+  - Total EMS Stations: 52
+  - Total Population: ~5.80M
+  - Uncovered Districts: count with nearest station > threshold
+  - Population % Outside 10-Min Coverage
+- Search box: filter districts by name
+- Governorate dropdown: filter by governorate
+- AHP Ranking Table:
+  - Columns: Rank, District, Governorate, Population, Stations, AHP Score
+  - Score shown as number + visual bar
+  - Color-coded priority indicator
+  - Clickable rows (highlights district on map, shows card)
+  - Sortable by score
+- Recommended New Stations section:
+  - The rule-based proposed locations (dense + unreachable-in-10-min clusters),
+    listed for the active weight preset and matching the tier shown on the map
+    (High-priority by default, or all when "Show all" is active)
+  - Each card shows: rank, coordinates, population served, uncovered pop,
+    mean AHP score, coverage radius
+  - Spacing assessment badge (adequate/tight/overcrowded)
+  - Action buttons: "Copy Coords", "Ask Copilot"
+
+SCREENSHOT: [Take a screenshot of the Analysis tab showing KPI cards and the
+AHP ranking table]
+
+SCREENSHOT: [Take a screenshot of the Recommended New Stations section showing
+candidate cards]
+
+8.5 Filters Tab
+- Toggle checkboxes for each map layer
+- Allows user to focus on specific aspects of the analysis
+
+SCREENSHOT: [Take a screenshot of the Filters tab with checkboxes]
+
+8.6 Selected District Card
+- Appears as floating card in bottom-left when user clicks a district on the
+  map or a row in the ranking table
+- Shows: district name, governorate, population, number of stations, area (km2),
+  population density, AHP score, AHP priority classification
+- Provides quick reference without leaving the map view
+
+SCREENSHOT: [Click on a high-priority district (e.g., Minieh-Danieh or Akkar) and
+take a screenshot showing the selected district card]
+
+8.7 Visual Design
+- Color scheme: strictly black-and-white for all UI chrome (panel, tables,
+  cards, text)
+- Background: #0a0a0a (near black)
+- Panel: #111111
+- Cards: #1a1a1a
+- Text: white (#ffffff) and light gray (#cfcfcf)
+- Only the MAP uses color:
+  - Red (#e74c3c): High priority districts
+  - Orange (#f39c12): Medium priority districts
+  - Green (#27ae60): Low priority districts
+  - Teal (#00cec9): Candidate station markers
+- This design choice ensures the priority color encoding on the map is the
+  most prominent visual element and is not confused with UI decoration
+
+================================================================================
+CHAPTER 9: AI-POWERED EMS COPILOT
+================================================================================
+
+9.1 Overview
+- An AI chat assistant embedded in the dashboard
+- Answers questions about EMS coverage, district data, AHP methodology,
+  and station placement
+- Runs 100% locally via FastAPI backend + optional Ollama LLM
+- No API keys, no internet calls for AI inference
+
+9.2 Architecture
+- Frontend: chat panel in dashboard (floating button, message history,
+  input field, suggestion chips)
+- Backend: FastAPI server (copilot_server.py) on http://127.0.0.1:8000
+- Endpoints:
+  - GET /health: checks server status, Ollama availability, AHP data loaded
+  - POST /chat: accepts {message, use_llm}, returns {answer, intent, data}
+- CORS enabled for cross-origin browser requests
+
+9.3 Intent Routing
+- Regex-based intent classification (no ML needed for routing):
+  - PLACEMENT: "where can I open an EMS center in [location]?"
+  - COMPARISON: "compare [district A] and [district B]"
+  - PRIORITY/RANKING: "which districts are highest priority?"
+  - DISTRICT LOOKUP: "tell me about [district]" or "how many stations in [X]?"
+  - AHP EXPLANATION: "what is the AHP model?" or "how does scoring work?"
+  - GOVERNORATE SUMMARY: "summarize [governorate]"
+  - NATIONAL SUMMARY: "give me a national overview"
+
+9.4 Deterministic Data Tools (always available, no LLM required)
+  - tool_district_info(name): returns population, stations, AHP score/priority,
+    travel time for a specific district
+  - tool_compare(a, b): side-by-side comparison of two districts
+  - tool_top_priority(n): returns top-N districts ranked by AHP score
+  - tool_governorate_summary(name): aggregates all districts in a governorate
+  - tool_national_summary(): nationwide KPIs and statistics
+
+9.5 Spatial Placement Assessment Tool
+- When user asks "where should I place a station near [location]":
+  1. Geocodes the location via OSM Nominatim API (or parses coordinates)
+  2. Determines urban/rural classification by governorate
+  3. Applies spacing heuristics: 1.5 km minimum (urban), 5 km (rural)
+  4. Checks for overcrowding (>= 2 existing stations within min spacing)
+  5. Returns verdict: adequate / tight / overcrowded
+  6. Suggests underserved district alternatives if placement is poor
+
+9.6 LLM Integration (Optional)
+- Model: Ollama running qwen2.5:3b locally (~3GB disk, ~6GB RAM)
+- System prompt enforces:
+  - Never invent numbers; use only TOOL_RESULT data
+  - Reference Lebanese standards with citation keys ([LRC-9], [MoPH-473], etc.)
+  - Keep answers under 200 words
+  - No emojis
+- If Ollama not installed: deterministic templated responses (still fully
+  functional, just less conversational)
+
+9.7 Status Indicator
+- Green dot: Copilot backend online and responsive
+- Red dot: backend not running or unreachable
+- Status checked every 3 seconds via /health endpoint polling
+
+SCREENSHOT: [Take a screenshot of the Copilot chat panel open with the AI
+button visible and suggestion chips shown]
+
+SCREENSHOT: [Take a screenshot of a Copilot conversation - ask "Which
+districts are highest priority?" and capture the response]
+
+SCREENSHOT: [Take a screenshot showing the Copilot status indicator (green
+or red dot in the chat header)]
+
+================================================================================
+CHAPTER 10: RESULTS & FINDINGS
+================================================================================
+
+10.1 District-Level AHP Results (Default Weights: 50/30/20, WorldPop 2025)
+
+  HIGH PRIORITY DISTRICTS (top 20% by AHP score):
+  -----------------------------------------------
+  District        Governorate      Population    Stations  AHP Score
+  Minieh-Danieh   Akkar            176,441       0         0.600
+  Akkar           Akkar            367,651       4         0.459
+  Jubail          Mount Lebanon    116,967       1         0.386
+  Baalbeck        Baalbak-Hermel   329,548       2         0.356
+  Chouf           Mount Lebanon    222,086       3         0.315
+  Beirut          Beirut           599,631       2         0.307
+
+  MEDIUM PRIORITY DISTRICTS (21-50%):
+  ------------------------------------
+  Aley            Mount Lebanon    230,237       3         0.299
+  Sour            South            288,655       1         0.282
+  Marjaayoun      Nabatiyeh         77,551       1         0.275
+  Hermel          Baalbak-Hermel    53,357       1         0.274
+  Batroun         Mount Lebanon     65,277       1         0.251
+  Kasrouane       Mount Lebanon    231,685       3         0.242
+  Jezzine         Mount Lebanon     30,342       2         0.169
+
+  LOW PRIORITY DISTRICTS (bottom 50%):
+  -------------------------------------
+  Hasbaya (0.166), West Bekaa (0.164), Tripoli (0.157), Saida (0.118),
+  Baabda (0.103), El Metn (0.081), Bcharre (0.073), Nabatiyeh (0.061),
+  Koura (0.057), Rachiaya (0.044), Zahleh (0.040), Zgharta (0.039),
+  Bint Jbayl (0.003)
+
+10.2 Key Insights
+- With travel-time gap weighted highest (50%), the top priorities are the
+  large, under-served districts where residents are far from any station -
+  not necessarily the densest cities.
+- Minieh-Danieh has the highest AHP score (0.600): it has ZERO EMS stations
+  serving ~176K people, giving it the worst travel-time gap and a fully
+  exposed population - a critical, currently-unreachable coverage gap.
+- Akkar (0.459) is a large northern district with only 4 stations spread over a
+  wide rural area, leaving pockets well beyond the 10-minute reach.
+- Jubail, Baalbeck, and Chouf rank high for the same reason: extensive areas
+  with sparse station coverage and populations beyond the coverage threshold.
+- Beirut, despite extreme population density, ranks only #6 (0.307): it is
+  very well covered (short travel times), so it scores high only on the density
+  criterion. This illustrates the model - dense but well-reached areas do not
+  dominate when accessibility is the heaviest weight.
+- Conversely, densely populated but well-covered districts (Baabda, El Metn,
+  Tripoli, Saida) fall into LOW priority because their nearest-station travel
+  times are short.
+
+10.3 Population Statistics
+- Total population: ~5.80 million (WorldPop 2025)
+- Total EMS stations: 52
+- National ratio: approximately 1 station per 112,000 people
+- Target ratio: 1 station per 50,000 (project heuristic)
+- Districts with 0 stations: Minieh-Danieh
+- Districts with only 1 station: Jubail, Sour, Marjaayoun, Hermel, Batroun,
+  Bcharre, Nabatiyeh, Koura, Rachiaya, Zgharta (10 districts)
+
+SCREENSHOT: [Take a screenshot of the AHP ranking table in the Analysis tab
+sorted by score, showing all districts]
+
+================================================================================
+CHAPTER 11: CANDIDATE STATION RECOMMENDATIONS
+================================================================================
+
+11.1 Methodology
+- Proposed stations follow the official placement rule (see Section 6.8): a
+  station is proposed wherever a high-density area (>= 2000 residents/km2)
+  cannot be reached by an existing station within 10 minutes by road.
+- Qualifying 1 km grid cells are clustered with DBSCAN (eps = 3 km,
+  min_samples = 1); each cluster yields one proposed station placed at the
+  population-weighted centroid.
+- The rule alone decides WHERE stations are proposed (it is weight-independent);
+  AHP weights only RANK the proposals and assign their High/Medium/Low tier.
+- Default run ("Balanced" preset): 32 proposed stations. Each one has uncovered
+  population > 0 and a mean travel time > 10 minutes, so every proposal
+  addresses a genuine coverage gap (no proposals in already-covered areas).
+- Each candidate includes: coordinates, population served, uncovered
+  population, mean travel time, coverage radius, and a spacing assessment.
+
+11.2 Spacing Assessment Logic
+- For each candidate location:
+  - Count existing stations within minimum spacing distance
+    (1.5 km urban, 5 km rural)
+  - If 0 nearby stations: "Adequate" spacing
+  - If 1 nearby station: "Tight" spacing
+  - If >= 2 nearby stations: "Overcrowded" (not recommended)
+
+11.3 Top Candidates (Balanced preset, ranked by AHP score)
+The dashboard shows all 32 proposed stations; by default the map highlights the
+7 High-priority ones. The current top proposals are:
+
+  Rank  District        Served   Uncovered  Travel Time  AHP Score
+  1     Minieh-Danieh   22,670   22,165     26.0 min     0.472
+  2     Baalbeck         6,347    2,128     24.4 min     0.442
+  3     Bcharre          9,444    8,353     18.0 min     0.439
+  4     Baalbeck         7,694    2,541     22.0 min     0.409
+  5     Akkar            7,422    2,074     20.1 min     0.370
+  6     Baalbeck        15,267   11,361     18.6 min     0.348
+  7     Chouf           17,185   10,734     17.7 min     0.340
+  8     Akkar            9,806    3,189     17.1 min     0.338
+  9     Sour             6,295    2,866     15.6 min     0.308
+  10    West Bekaa      10,409    5,628     15.5 min     0.305
+
+(Exact values depend on the latest pipeline run and the selected weight preset;
+the proposed locations are the same across presets - only the ranking changes.)
+
+SCREENSHOT: [Take a screenshot of the candidate station cards in the Analysis
+tab, showing coordinates, population, and spacing badges]
+
+SCREENSHOT: [Click on a candidate station on the map and take a screenshot
+showing it zoomed in with the coverage ring highlighted]
+
+================================================================================
+CHAPTER 12: LIMITATIONS & FUTURE WORK
+================================================================================
+
+12.1 Current Limitations
+- Lebanon does not publicly codify a spatial spacing rule for EMS bases.
+  The 1.5 km / 5 km thresholds used are transparent demo heuristics derived
+  from the 9-minute response target, not legal requirements.
+- Travel time uses the OSM static road graph; real-time traffic, road
+  closures, and seasonal conditions are not modeled.
+- The EMS station list is an operational snapshot and may not reflect every
+  currently active or recently opened/closed facility.
+- Population data is from WorldPop 2025 estimates; actual population may
+  vary due to displacement, seasonal migration, and refugee populations.
+- AHP weights (50/30/20) are project defaults; different stakeholders may
+  have different priorities (the dashboard allows live adjustment).
+- The model uses district centroids for travel time calculation; within large
+  districts, actual travel times vary significantly by location.
+- Grid-level analysis partially addresses this but is computationally heavier.
+
+12.2 Future Work
+- Incorporate real-time traffic data for dynamic travel time estimation
+- Add demand-side data (historical call volumes, incident locations)
+- Include terrain/elevation as an additional criterion
+- Pairwise comparison matrix for formal AHP consistency checking
+- Multi-scenario analysis (disaster response, conflict zones)
+- Integration with hospital/healthcare facility locations
+- Mobile-responsive dashboard design
+- Add more LLM models for enhanced Copilot capabilities
+- Extend to other countries or administrative levels
+
+================================================================================
+CHAPTER 13: CONCLUSION
+================================================================================
+
+- This project successfully developed a comprehensive, data-driven decision
+  support system for EMS station placement in Lebanon using the AHP methodology.
+- The system integrates four open data sources (GADM, WorldPop, OSM, EMS
+  station records) into a unified analytical pipeline.
+- Three weighted criteria (travel-time gap, population density, exposed
+  population) produce transparent, auditable priority scores for all 26
+  Lebanese districts.
+- The interactive dashboard allows stakeholders to adjust model parameters
+  in real time and immediately see the impact on priorities and map
+  visualization.
+- The AI-powered EMS Copilot provides accessible data querying without
+  requiring GIS expertise.
+- Key finding: Minieh-Danieh, Akkar, Jubail, Baalbeck, Chouf, and Beirut are
+  the highest priority districts for additional EMS coverage under the default
+  AHP model, driven primarily by the travel-time gap (large under-served areas
+  far from any existing station) rather than density alone.
+- New EMS stations are then proposed by a transparent rule - a high-density
+  area (>= 2000 residents/km2) that cannot be reached within 10 minutes -
+  yielding 32 concrete, justifiable candidate locations.
+- The system runs entirely locally, ensuring data privacy and eliminating
+  dependency on cloud services.
+
+================================================================================
+CHAPTER 14: REFERENCES & CITATIONS
+================================================================================
+
+Data Sources:
+- GADM v4.1 — Global Administrative Areas Database. https://gadm.org
+- WorldPop 2025 — Constrained population estimates, 1km resolution.
+  https://www.worldpop.org
+- OpenStreetMap — Road network data via OSMnx. https://www.openstreetmap.org
+- Lebanese Red Cross / IFRC, "International Network Plan 2023, Lebanon"
+  [LRC-9, LRC-13]
+- Lebanese Ministry of Public Health, Karar (Decision) No. 473/2021 [MoPH-473]
+- European EMS response standard — 8 minutes for critical calls [EU-8]
+- WHO Clinical Services & Systems framework [WHO]
+
+Software & Libraries:
+- Python 3.13 — https://www.python.org
+- GeoPandas 1.1.2 — https://geopandas.org
+- Folium 0.20.0 — https://python-visualization.github.io/folium
+- OSMnx 2.1.0 — https://osmnx.readthedocs.io
+- Rasterio 1.5.0 — https://rasterio.readthedocs.io
+- scikit-learn 1.8.0 — https://scikit-learn.org
+- NetworkX 3.5 — https://networkx.org
+- Shapely 2.1.2 — https://shapely.readthedocs.io
+- FastAPI 0.115.0 — https://fastapi.tiangolo.com
+- Leaflet.js — https://leafletjs.com
+- Ollama — https://ollama.com
+
+Methodology:
+- Saaty, T.L. (1980). "The Analytic Hierarchy Process." McGraw-Hill.
+
+================================================================================
+SCREENSHOT CHECKLIST (SUMMARY)
+================================================================================
+
+Take these screenshots from the running dashboard and include them in the
+corresponding report chapters:
+
+  #   What to Capture                                          Chapter
+  --  -----------------------------------------------          -------
+  1   Full dashboard overview (map + panel visible)            Ch. 1
+  2   Map zoomed out showing all Lebanon with districts        Ch. 3
+  3   Map with AHP priority colors ONLY (other layers off)    Ch. 8
+  4   Map with population heatmap ON                           Ch. 8
+  5   Map with EMS station markers (red crosses)               Ch. 8
+  6   Map with candidate stations (teal) + coverage rings      Ch. 8
+  7   Map with 10-min coverage polygon visible                 Ch. 8
+  8   Model tab - default weights (50/30/20)                   Ch. 5
+  9   Model tab - changed weights showing live update          Ch. 5
+  10  Model tab - Live Results with priority chips             Ch. 5
+  11  Analysis tab - KPI cards + ranking table                 Ch. 10
+  12  Analysis tab - Recommended New Stations cards            Ch. 11
+  13  Filters tab with checkboxes                              Ch. 8
+  14  Selected district card (click Minieh-Danieh or Akkar)    Ch. 8
+  15  Copilot panel open with suggestion chips                 Ch. 9
+  16  Copilot conversation (ask "highest priority?")           Ch. 9
+  17  Copilot s1tatus indicator (green/red dot)                 Ch. 9
+  18  Candidate station zoomed in with ring highlighted        Ch. 11
+
+================================================================================
+END OF REPORT OUTLINE
+================================================================================

@@ -46,7 +46,7 @@ DATA_DIR = os.path.join(PROJECT_ROOT, "data")
 
 DISTRICTS_FILE = os.path.join(DATA_DIR, "gadm41_LBN_2.json")
 EMS_STATIONS_FILE = os.path.join(DATA_DIR, "EMS_Station_Locations.xlsx")
-POPULATION_RASTER_FILE = os.path.join(DATA_DIR, "lbn_pop_2024_CN_1km_R2025A_UA_v1.tif")
+POPULATION_RASTER_FILE = os.path.join(DATA_DIR, "lbn_pop_2025_CN_1km_R2025A_UA_v1.tif")
 AHP_SIDECAR_FILE = os.path.join(DATA_DIR, "phase1_ahp_districts.json")
 
 OLLAMA_URL = os.environ.get("OLLAMA_URL", "http://127.0.0.1:11434")
