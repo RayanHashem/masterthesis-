@@ -4,6 +4,14 @@
 // are injected by Python above this script block.
 // ============================================================================
 
+// ── Phase 2: dataset-backed globals (sourced from the active dataset) ──
+let DISTRICTS = DATASETS[ACTIVE_DATASET].districts;
+let STATIONS = DATASETS[ACTIVE_DATASET].supply;
+let CRITERIA_CONFIG = DATASETS[ACTIVE_DATASET].criteria;
+let CANDIDATES_BY_PRESET = DATASETS[ACTIVE_DATASET].candidatesByPreset;
+let CANDIDATES = (CANDIDATES_BY_PRESET && CANDIDATES_BY_PRESET.balanced) || [];
+let DEFAULT_COVERAGE_THRESHOLD = DATASETS[ACTIVE_DATASET].threshold;
+
 let map = null;
 let districtLayersByName = {};
 let highlightTimeout = null;
@@ -1011,6 +1019,35 @@ function initMapRefs() {
 
     bindMapDistrictClick();
     initCandidatesLayer();
+}
+
+// ── DATASET SWITCH ────────────────────────────────────────────────────────────
+function setActiveDataset(key) {
+    if (!DATASETS[key]) return;
+    ACTIVE_DATASET = key;
+    const ds = DATASETS[key];
+    DISTRICTS = ds.districts;
+    STATIONS = ds.supply;
+    CRITERIA_CONFIG = ds.criteria;
+    CANDIDATES_BY_PRESET = ds.candidatesByPreset;
+    CANDIDATES = (CANDIDATES_BY_PRESET && CANDIDATES_BY_PRESET.balanced) || [];
+    DEFAULT_COVERAGE_THRESHOLD = ds.threshold;
+
+    // Re-render map + panels for the newly active dataset.
+    if (typeof refreshSupplyLayer === 'function') refreshSupplyLayer(); // defined in a later task
+    if (typeof initCandidatesLayer === 'function') initCandidatesLayer();
+    if (typeof initModelNormScores === 'function') initModelNormScores();
+    if (typeof recomputeAhpScores === 'function') recomputeAhpScores();
+    if (typeof updateMapDistrictColors === 'function') updateMapDistrictColors();
+    if (typeof renderModelTab === 'function') renderModelTab();
+    if (typeof renderFiltersTab === 'function') renderFiltersTab();
+    if (typeof applyFilters === 'function') applyFilters();
+    if (typeof renderAhpSummary === 'function' && typeof getFilteredDistricts === 'function') {
+        const f = getFilteredDistricts();
+        renderAhpSummary(f);
+        if (typeof renderAhpRanking === 'function') renderAhpRanking(f);
+    }
+    if (typeof renderCandidates === 'function') renderCandidates();
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
