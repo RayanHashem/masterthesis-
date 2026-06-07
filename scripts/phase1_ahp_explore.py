@@ -361,117 +361,15 @@ except Exception as e:
     traceback.print_exc()
     G = None
 
-# ============================================================================
-# 5d. STEP 1B — COMPUTE 10-MINUTE COVERAGE + PER-DISTRICT TRAVEL TIME
-# ============================================================================
-print("5d. 10-MINUTE COVERAGE + PER-DISTRICT TRAVEL TIME (STEP 1B)")
-print("-" * 80)
-
-coverage_gdf = None  # Will hold 10-min coverage polygon for map (Step 1C)
-best_time_s = None  # Will hold multi-source Dijkstra results (used by grid sections)
-
-if G is not None:
-    try:
-        # Snap each EMS station to nearest graph node
-        station_lons = ems_valid[lon_col].values
-        station_lats = ems_valid[lat_col].values
-        station_nodes = ox.nearest_nodes(G, station_lons, station_lats)
-        station_nodes_unique = set(station_nodes)
-        print(f"  ✓ Snapped {len(station_nodes)} stations to {len(station_nodes_unique)} unique graph nodes")
-        
-        # Multi-source Dijkstra: min travel time from ANY station to ALL nodes
-        best_time_s = nx.multi_source_dijkstra_path_length(G, station_nodes_unique, weight='travel_time')
-        print(f"  ✓ Computed shortest travel times to {len(best_time_s)} reachable nodes")
-        
-        # For each district: centroid/representative_point -> nearest node -> min_travel_time_min
-        min_travel_times = []
-        covered_10min_list = []
-        for idx, row in districts_agg.iterrows():
-            geom = row.geometry
-            pt = geom.representative_point()
-            lon_pt, lat_pt = pt.x, pt.y
-            nearest_node = ox.nearest_nodes(G, [lon_pt], [lat_pt])[0]
-            best_s = best_time_s.get(nearest_node, float('inf'))
-            min_travel_time_min = round(best_s / 60.0, 1) if best_s != float('inf') else float('inf')
-            covered_10min = min_travel_time_min <= 10 if min_travel_time_min != float('inf') else False
-            min_travel_times.append(min_travel_time_min if min_travel_time_min != float('inf') else np.nan)
-            covered_10min_list.append(covered_10min)
-        
-        districts_agg['min_travel_time_min'] = min_travel_times
-        districts_agg['covered_10min'] = covered_10min_list
-        
-        n_covered = sum(covered_10min_list)
-        print(f"  ✓ Added min_travel_time_min and covered_10min to {len(districts_agg)} districts")
-        print(f"  ✓ Districts within 10 min of EMS: {n_covered} / {len(districts_agg)}")
-        
-        # Build coverage polygon for map (Step 1C): nodes reachable within 10 min
-        nodes_10min = [n for n, t in best_time_s.items() if t <= 600]
-        if nodes_10min:
-            points = []
-            for n in nodes_10min:
-                nd = G.nodes[n]
-                lon, lat = nd.get('x'), nd.get('y')
-                if lon is not None and lat is not None:
-                    points.append(Point(lon, lat))
-            if points:
-                pts_gdf = gpd.GeoDataFrame(geometry=points, crs='EPSG:4326')
-                pts_proj = pts_gdf.to_crs('EPSG:32636')  # UTM 36N for Lebanon
-                buffered = pts_proj.geometry.buffer(200)  # 200m buffer
-                coverage_geom = unary_union(buffered.tolist())
-                coverage_gdf = gpd.GeoDataFrame(
-                    [{'geometry': coverage_geom}],
-                    crs='EPSG:32636'
-                ).to_crs('EPSG:4326')
-                print(f"  ✓ Built 10-min coverage polygon from {len(points)} nodes")
-        
-    except Exception as e:
-        print(f"  ✗ Error computing 10-min coverage: {e}")
-        import traceback
-        traceback.print_exc()
-        districts_agg['min_travel_time_min'] = np.nan
-        districts_agg['covered_10min'] = False
-else:
-    print("  ⚠ Skipped (no road network)")
-    districts_agg['min_travel_time_min'] = np.nan
-    districts_agg['covered_10min'] = False
-
-# ============================================================================
-# 5e. AHP SCORING (PHASE 3.1) — computed before map so layers can use these fields
-# ============================================================================
-print("5e. COMPUTING AHP SCORES")
-print("-" * 80)
-
-# --- Area in km² (project to metric CRS first) ---
-districts_metric = districts_agg.to_crs(epsg=3857)
-districts_agg['area_km2'] = (districts_metric.geometry.area / 1e6).values
-
-# --- C1: Accessibility Gap (COST — higher travel time = worse) ---
-# Missing travel time treated as max (worst case)
-_max_travel = districts_agg['min_travel_time_min'].max()
-if pd.isna(_max_travel):
-    _max_travel = 0
-districts_agg['_c1_raw'] = districts_agg['min_travel_time_min'].fillna(_max_travel)
-
-# --- C2: Population Density (BENEFIT) ---
-districts_agg['pop_density'] = districts_agg.apply(
-    lambda r: r['population'] / r['area_km2'] if r['area_km2'] > 0 else 0, axis=1
-)
-
-# --- C3: Exposed Population (BENEFIT — population not covered in 10 min) ---
-districts_agg['exposed_population'] = districts_agg.apply(
-    lambda r: r['population'] if r['covered_10min'] == False else 0, axis=1
-)
+# ----------------------------------------------------------------------------
+# Shared definitions for supply analysis (used by run_supply_analysis below)
+# ----------------------------------------------------------------------------
 
 def minmax_normalize(series):
     mn, mx = series.min(), series.max()
     if mx == mn:
         return pd.Series([0.0] * len(series), index=series.index)
     return (series - mn) / (mx - mn)
-
-# Normalize each criterion
-districts_agg['norm_access_gap']  = minmax_normalize(districts_agg['_c1_raw'])
-districts_agg['norm_pop_density'] = minmax_normalize(districts_agg['pop_density'])
-districts_agg['norm_exposed_pop'] = minmax_normalize(districts_agg['exposed_population'])
 
 # AHP weights
 W_C1, W_C2, W_C3 = 0.5, 0.3, 0.2
@@ -507,37 +405,171 @@ CRITERIA_CONFIG = [
     },
 ]
 
-_district_raw_score = (
-    W_C1 * districts_agg['norm_access_gap'] +
-    W_C2 * districts_agg['norm_pop_density'] +
-    W_C3 * districts_agg['norm_exposed_pop']
+
+def run_supply_analysis(districts, G, supply_lons, supply_lats,
+                        threshold_min, weights, criteria_config):
+    """Run travel-time coverage + AHP scoring for one supply layer.
+
+    Returns {'districts': <copy with min_travel_time_min, covered, norm_* ,
+    ahp_score, ahp_priority>, 'coverage_gdf': ..., 'best_time_s': ...}.
+    weights is (w_c1, w_c2, w_c3). criteria_config is embedded per dataset.
+    """
+    d = districts.copy()
+
+    # ========================================================================
+    # STEP 1B — COMPUTE COVERAGE + PER-DISTRICT TRAVEL TIME
+    # ========================================================================
+    coverage_gdf = None  # Will hold coverage polygon for map (Step 1C)
+    best_time_s = None  # Will hold multi-source Dijkstra results (used by grid sections)
+
+    if G is not None:
+        try:
+            # Snap each supply point to nearest graph node
+            station_lons = supply_lons
+            station_lats = supply_lats
+            station_nodes = ox.nearest_nodes(G, station_lons, station_lats)
+            station_nodes_unique = set(station_nodes)
+            print(f"  ✓ Snapped {len(station_nodes)} stations to {len(station_nodes_unique)} unique graph nodes")
+
+            # Multi-source Dijkstra: min travel time from ANY station to ALL nodes
+            best_time_s = nx.multi_source_dijkstra_path_length(G, station_nodes_unique, weight='travel_time')
+            print(f"  ✓ Computed shortest travel times to {len(best_time_s)} reachable nodes")
+
+            # For each district: centroid/representative_point -> nearest node -> min_travel_time_min
+            min_travel_times = []
+            covered_list = []
+            for idx, row in d.iterrows():
+                geom = row.geometry
+                pt = geom.representative_point()
+                lon_pt, lat_pt = pt.x, pt.y
+                nearest_node = ox.nearest_nodes(G, [lon_pt], [lat_pt])[0]
+                best_s = best_time_s.get(nearest_node, float('inf'))
+                min_travel_time_min = round(best_s / 60.0, 1) if best_s != float('inf') else float('inf')
+                covered = min_travel_time_min <= threshold_min if min_travel_time_min != float('inf') else False
+                min_travel_times.append(min_travel_time_min if min_travel_time_min != float('inf') else np.nan)
+                covered_list.append(covered)
+
+            d['min_travel_time_min'] = min_travel_times
+            d['covered'] = covered_list
+
+            n_covered = sum(covered_list)
+            print(f"  ✓ Added min_travel_time_min and covered to {len(d)} districts")
+            print(f"  ✓ Districts within {threshold_min} min of EMS: {n_covered} / {len(d)}")
+
+            # Build coverage polygon for map (Step 1C): nodes reachable within threshold
+            nodes_covered = [n for n, t in best_time_s.items() if t <= threshold_min * 60]
+            if nodes_covered:
+                points = []
+                for n in nodes_covered:
+                    nd = G.nodes[n]
+                    lon, lat = nd.get('x'), nd.get('y')
+                    if lon is not None and lat is not None:
+                        points.append(Point(lon, lat))
+                if points:
+                    pts_gdf = gpd.GeoDataFrame(geometry=points, crs='EPSG:4326')
+                    pts_proj = pts_gdf.to_crs('EPSG:32636')  # UTM 36N for Lebanon
+                    buffered = pts_proj.geometry.buffer(200)  # 200m buffer
+                    coverage_geom = unary_union(buffered.tolist())
+                    coverage_gdf = gpd.GeoDataFrame(
+                        [{'geometry': coverage_geom}],
+                        crs='EPSG:32636'
+                    ).to_crs('EPSG:4326')
+                    print(f"  ✓ Built coverage polygon from {len(points)} nodes")
+
+        except Exception as e:
+            print(f"  ✗ Error computing coverage: {e}")
+            import traceback
+            traceback.print_exc()
+            d['min_travel_time_min'] = np.nan
+            d['covered'] = False
+    else:
+        print("  ⚠ Skipped (no road network)")
+        d['min_travel_time_min'] = np.nan
+        d['covered'] = False
+
+    # ========================================================================
+    # AHP SCORING (PHASE 3.1) — computed before map so layers can use fields
+    # ========================================================================
+    print("   COMPUTING AHP SCORES")
+    print("-" * 80)
+
+    # --- Area in km² (project to metric CRS first) ---
+    districts_metric = d.to_crs(epsg=3857)
+    d['area_km2'] = (districts_metric.geometry.area / 1e6).values
+
+    # --- C1: Accessibility Gap (COST — higher travel time = worse) ---
+    # Missing travel time treated as max (worst case)
+    _max_travel = d['min_travel_time_min'].max()
+    if pd.isna(_max_travel):
+        _max_travel = 0
+    d['_c1_raw'] = d['min_travel_time_min'].fillna(_max_travel)
+
+    # --- C2: Population Density (BENEFIT) ---
+    d['pop_density'] = d.apply(
+        lambda r: r['population'] / r['area_km2'] if r['area_km2'] > 0 else 0, axis=1
+    )
+
+    # --- C3: Exposed Population (BENEFIT — population not covered) ---
+    d['exposed_population'] = d.apply(
+        lambda r: r['population'] if r['covered'] == False else 0, axis=1
+    )
+
+    # Normalize each criterion
+    d['norm_access_gap']  = minmax_normalize(d['_c1_raw'])
+    d['norm_pop_density'] = minmax_normalize(d['pop_density'])
+    d['norm_exposed_pop'] = minmax_normalize(d['exposed_population'])
+
+    _district_raw_score = (
+        weights[0] * d['norm_access_gap'] +
+        weights[1] * d['norm_pop_density'] +
+        weights[2] * d['norm_exposed_pop']
+    )
+    d['ahp_score'] = _district_raw_score.round(3)
+
+    # Quantile-based priority: top 20% = High, next 30% = Medium, bottom 50% = Low
+    # Avoids fixed-threshold issue where no district reaches 0.66 in Lebanon's context
+    _d_q80 = _district_raw_score.quantile(0.80)
+    _d_q50 = _district_raw_score.quantile(0.50)
+
+    def ahp_priority_label(score):
+        if score >= _d_q80:
+            return 'High'
+        elif score >= _d_q50:
+            return 'Medium'
+        return 'Low'
+
+    d['ahp_priority'] = _district_raw_score.apply(ahp_priority_label)
+
+    # Drop only the internal raw column; keep norm_* columns so they can be shipped to JS
+    d.drop(columns=['_c1_raw'], inplace=True)
+
+    _high_count   = (d['ahp_priority'] == 'High').sum()
+    _medium_count = (d['ahp_priority'] == 'Medium').sum()
+    _low_count    = (d['ahp_priority'] == 'Low').sum()
+    print(f"  ✓ AHP scores computed for {len(d)} districts")
+    print(f"  High priority:   {_high_count}")
+    print(f"  Medium priority: {_medium_count}")
+    print(f"  Low priority:    {_low_count}")
+
+    return {'districts': d, 'coverage_gdf': coverage_gdf, 'best_time_s': best_time_s}
+
+
+# ============================================================================
+# 5d/5e. SUPPLY ANALYSIS — TRAVEL-TIME COVERAGE + AHP SCORING (EMS)
+# ============================================================================
+print("5d/5e. EMS SUPPLY ANALYSIS (COVERAGE + AHP)")
+print("-" * 80)
+
+EMS_WEIGHTS = (0.5, 0.3, 0.2)
+EMS_THRESHOLD_MIN = 10
+ems_result = run_supply_analysis(
+    districts_agg, G,
+    ems_valid[lon_col].values, ems_valid[lat_col].values,
+    EMS_THRESHOLD_MIN, EMS_WEIGHTS, CRITERIA_CONFIG,
 )
-districts_agg['ahp_score'] = _district_raw_score.round(3)
-
-# Quantile-based priority: top 20% = High, next 30% = Medium, bottom 50% = Low
-# Avoids fixed-threshold issue where no district reaches 0.66 in Lebanon's context
-_d_q80 = _district_raw_score.quantile(0.80)
-_d_q50 = _district_raw_score.quantile(0.50)
-
-def ahp_priority_label(score):
-    if score >= _d_q80:
-        return 'High'
-    elif score >= _d_q50:
-        return 'Medium'
-    return 'Low'
-
-districts_agg['ahp_priority'] = _district_raw_score.apply(ahp_priority_label)
-
-# Drop only the internal raw column; keep norm_* columns so they can be shipped to JS
-districts_agg.drop(columns=['_c1_raw'], inplace=True)
-
-_high_count   = (districts_agg['ahp_priority'] == 'High').sum()
-_medium_count = (districts_agg['ahp_priority'] == 'Medium').sum()
-_low_count    = (districts_agg['ahp_priority'] == 'Low').sum()
-print(f"  ✓ AHP scores computed for {len(districts_agg)} districts")
-print(f"  High priority:   {_high_count}")
-print(f"  Medium priority: {_medium_count}")
-print(f"  Low priority:    {_low_count}")
+districts_agg = ems_result['districts']
+coverage_gdf = ems_result['coverage_gdf']
+best_time_s = ems_result['best_time_s']
 
 # ============================================================================
 # 5f. PHASE 4.1 — CREATE 1KM ANALYSIS GRID FROM POPULATION RASTER
@@ -883,7 +915,7 @@ m = folium.Map(
 # Neutral style for district boundaries context layer
 def style_district_neutral(feature):
     props = feature['properties']
-    covered_10min = props.get('covered_10min', True)
+    covered_10min = props.get('covered', True)
     priority = props.get('ahp_priority', 'Low')
     ahp_colors = {
         'High':   '#e74c3c',
@@ -922,7 +954,7 @@ def make_popup_html(row):
     population = row.get('population', 0)
     stations = int(row.get('ems_stations', 0))
     min_travel = row.get('min_travel_time_min', np.nan)
-    covered_10 = row.get('covered_10min', False)
+    covered_10 = row.get('covered', False)
     ahp_score = row.get('ahp_score', 0)
     ahp_priority = row.get('ahp_priority', 'Low')
 
@@ -954,7 +986,7 @@ districts_for_map['popup_html'] = districts_for_map.apply(make_popup_html, axis=
 
 # Add tooltip access gap message for uncovered districts
 districts_for_map['tooltip_access_gap'] = districts_for_map.apply(
-    lambda r: 'Access Gap: Outside 10-min coverage' if r.get('covered_10min') == False else '',
+    lambda r: 'Access Gap: Outside 10-min coverage' if r.get('covered') == False else '',
     axis=1
 )
 
@@ -1075,7 +1107,7 @@ if coverage_gdf is not None and len(coverage_gdf) > 0:
 def style_ahp(feature):
     props = feature['properties']
     priority = props.get('ahp_priority', 'Low')
-    covered_10min = props.get('covered_10min', True)
+    covered_10min = props.get('covered', True)
     ahp_colors = {
         'High':   '#e74c3c',
         'Medium': '#f39c12',
@@ -1251,7 +1283,7 @@ total_districts = len(districts_agg)
 avg_stations_per_100k = (total_stations / total_pop * 100000) if total_pop > 0 else 0
 
 # Coverage KPIs (10-min travel time)
-uncovered_mask = districts_agg['covered_10min'] == False
+uncovered_mask = districts_agg['covered'] == False
 uncovered_districts_count = int(uncovered_mask.sum())
 total_districts_count = len(districts_agg)
 uncovered_population = float(districts_agg.loc[uncovered_mask, 'population'].sum())
@@ -1530,6 +1562,9 @@ print("=" * 80)
 print(f"Districts loaded: {len(districts_agg)} (unique)")
 print(f"EMS stations plotted: {len(ems_valid)}")
 print(f"Total population: {total_population:,.0f}")
+_high_count   = (districts_agg['ahp_priority'] == 'High').sum()
+_medium_count = (districts_agg['ahp_priority'] == 'Medium').sum()
+_low_count    = (districts_agg['ahp_priority'] == 'Low').sum()
 print(f"AHP High priority:   {_high_count}")
 print(f"AHP Medium priority: {_medium_count}")
 print(f"AHP Low priority:    {_low_count}")
