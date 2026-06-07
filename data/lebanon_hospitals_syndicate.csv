@@ -1,0 +1,135 @@
+syndicate_id,name,beds,location,address,established,type_of_care,moph_accredited
+40,Hotel Dieu de France,430,Beirut,Hotel Dieu de France - Bvd. Alfred Naccache - Achrafieh - Beirut - Lebanon,1/1/1923,Long Term Care,yes
+41,Clinique Dr. Rizk,160,Beirut,Rue Zahar - Achrafieh - Beyrouth - Liban,1925,Short Term Care,yes
+43,Makassed,200,Beirut,Tarik El Jadida,1/1/1930,Short Term Care,Yes
+44,Al-Rassoul Al-Aazam hospital,240,Beirut,Bourj Al-Barajneh - Airport Road - Beirut,1/1/1988,Short Term Care,Yes
+54,Dar Al-Ajaza Al-Islamia Hospital,700,Beirut,Tarik Al-Jadida - East of Sport City,30/04/1954,Long & Short Term Care,yes
+56,Child & Mother Welfare Hospital,19,Beirut,Tallet El Khayyat - Corniche Television - Hassan Kamel Sabbah Street,1/1/1951,Short Term Care,no
+59,Fouad Khoury Hospital,26,Beirut,Al Aziz Street - Maktabi BLDG. - Beirut - Lebanon,1/1/1960,Short Term Care,yes
+65,Bekhaazi,13,Beirut,Clemenceau Strt,1/1/1961,Short Term Care,no
+67,Bahman hospital,200,Beirut,Haret Hreik - Dakkash Street,1/3/1999,All forms of health care,yes
+71,Najjar Hospital,53,Beirut,"Ma'amari Street- Ras Beirut, Lebanon Str. P.O.Box: 113-5984",10/15/1982,Short Term Care,Yes
+62,Foyer Saint Georges,70,Beirut,Ashrafieh,1/1/1874,Long Term Care,no
+81,Al Zahraa University Hospital,200,Beirut,Jnah,1/1/1976,Short Term Care,yes
+96,Beirut,40,Beirut,Ramlet El-Bayda,1/1/1974,Short Term Care,yes
+115,Haddad hospital for the Rosary Sisters,50,Beirut,Gemmayzeh - Abou Rouss Street,1/1/1970,Short Term Care,yes
+116,St Antoine (Souhaid),23,Beirut,Achrafieh,-,Short Term Care,Yes
+118,Saint George Hospital University Medical Center,210,Beirut,Rmeil - Youssef Sursok Street P.O.Box: 166378 Achrafieh Beirut 11002807 - Lebanon,1/1/1878,Short Term Care,Yes
+123,Khalidy Hospital,16,Beirut,Hamra - Khalidy Station - Ras Beirut - Beirut - Lebanon P.O.Box: 113-5095,-,Short Term Care,No
+126,Sahel General Hospital,152,Beirut,Airport Ave. PO box 99/25 Ghobeiry - Beirut - Lebanon,April 13th 1983,Short Term Care,yes
+127,Trad Hospital & Medical Center,63,Beirut,"53, rue du Mexique, Clemenceau",1940,Short Term Care,yes
+128,Womens,14,Beirut,Mohamad Hout,-,Short Term Care,No
+129,Dar El Sahel,32,Beirut,Aramoun Kobeh,-,Long Term Care,yes
+130,Hopital Libanais,150,Beirut,Geitawi Street - Ashrafieh,-1927,Short and Long Term Care,yes
+112,Hopital Dr. Adnan Haidar,12,Beirut,Beirut - Noueiry Station - Lebanon,1/1/1956,Short Term Care,No
+207,Bourj hospital,24,Beirut,Bourj El Barajneh - Osman Street,4/29/2001,Short Term Care,yes
+208,American University of Beirut Medical Center,400,Beirut,P.O.Box: 11-236 Riad El Solh 1107 2020 Lebanon,1902,Short Term Care,yes
+216,Clemenceau Medical Center affiliated with Johns Hopkins International - CMC,106,Beirut,,2005,short term care,no
+233,Beirut Eye Specialty Hospital,20,Beirut,"Achrafieh, Rue Hôtel Dieu",-,Short Term Care,yes
+224,Battoul,29,Bekaa,alhermel,-october 2003,short term care,yes
+155,Chtoura Hospital,32,Bekaa,Chtoura - 200 meter behind Police Station,1996,Short Term Care,yes
+157,Dar El Hikmah,85,Bekaa,baalbeck,1992,Short Term Care,yes
+158,Doctors,50,Bekaa,El Manara,-,Short Term Care,yes
+159,El Assi,36,Bekaa,Hermel Tel Strt,-,Short Term Care,yes
+160,El Bekaa,100,Bekaa,Taalbaya,1/09/1997,Short Term Care,yes
+161,Farhat .F c,23,Bekaa,Beit-Chama,-,Short Term Care,No
+162,Ibn Sina,75,Bekaa,Baalbeck,-,Short Term Care,yes
+163,Khoury General Hospital - Zahle - Doctors Center,120,Bekaa,Zahlé - Barbara -Brasil Street. P.O.Box: 5 Zahle,1/1/1990,Short Term Care (ISO 9001-2000 ) in 2005,yes
+164,Libano-Francais,132,Bekaa,Houch El Oumara,2/10/1993,Short Term Care,yes
+165,Al Mortada hospital,50,Bekaa,Baalbeck Douris,1/19/1985,Short Term Care,yes
+166,Rayan,59,Bekaa,Baalbeck-Charawina,5-12-1991,Short Term Care,yes
+167,Taanayel Gen.Hosp.,75,Bekaa,Taanayel,-,Short Term Care,no
+168,Tal Chiha,125,Bekaa,Zahleh,-1948,Short Term Care,yes
+170,Universal,20,Bekaa,Ras Baalbeck,-,Short Term Care,no
+88,Dar Al-Amal University Hospital,220,Bekaa,Douris - Baalbeck,1996 - Opening in 2002,Both,yes
+101,Khatib hospital,40,Bekaa,Karak - Zahleh - Bekaa main road,1/1/1976,Short Term Care,No
+75,Dr. Hamed Farhat hospital,84,Bekaa,Kamed El Lawz - West Bekaa - Lebanon,1/1/1981,Short Term Care,yes
+78,Bahmad,30,Bekaa,Rachaya EL Wadi,1/1/1991,Short Term Care,no
+73,Tatari hospital,35,Bekaa,Beshara Al Khoury Street - Baalbeck - Lebanon,1/1/1980,Short Term Care,Yes
+61,Rayak Hospital,125,Bekaa,Rayak,1/1/1995,Short Term Care,Yes
+58,St Michel,13,Kesrouan/Jbeil,Amchit,1/1/1858,Short Term Care,Yes
+50,Hopital Notre Dame Maritime,90,Kesrouan/Jbeil,Voie 13 - Jbeil,1/4/1981,Hôpital Général - Accréditation Niveau 1,Yes
+108,Hopital Saint Georges - Ajaltoun,100,Kesrouan/Jbeil,"Ajaltoun, rue Georges Matta, kesrouan - Liban",1/1/1983,Short Term Care,yes
+91,Centre Hospitalier Universitaire - Notre Dame de Secours,250,Kesrouan/Jbeil,Jbeil,1/1/1978,Short Term Care,yes
+95,St Louis,65,Kesrouan/Jbeil,Jounieh,1/1/1972,Short Term Care,yes
+138,Hopital Monseigneur Cortbawi,25,Kesrouan/Jbeil,Adma,-,Short Term Care,yes
+139,Hajj,10,Kesrouan/Jbeil,Achkout,-,Short Term Care,no
+140,Hopital Notre Dame du Liban,140,Kesrouan/Jbeil,Fouad Chehab Street - Jounieh - Lebanon P.O.Box: 7 Jounieh,1/1/1960,Short Term Care,Yes
+237,Keserwan medical Center,0,Kesrouan/Jbeil,غازير,,,no
+232,Bshamoun Specialty Hospital,32,Chouf/Aley,,,Short Term Care,no
+225,Othman,44,Chouf/Aley,chouf ketermeya,2001,short term care,yes
+146,Baaklyn,55,Chouf/Aley,Baaklyn,-,Short Term Care,yes
+147,Armenian Sanatorium of Azounieh,125,Chouf/Aley,EL Azounieh,1923,Long Term Care,yes
+150,Iman,52,Chouf/Aley,Aley,-1980,Short Term Care,yes
+151,Medical 2000 Co. SARL Kamal Joumblat hopital,19,Chouf/Aley,Chouiefat Omara - Maidan Street,1/5/2001,Short Term Care,yes
+154,Watani,30,Chouf/Aley,Aley,-16/11/1978,Short Term Care,yes
+94,Hôpital des Soeurs de la Croix (Deir-El-Kamar),280,Chouf/Aley,Deir El Kamar,12/11/1969,Long Term Care,yes
+97,Irfane,39,Chouf/Aley,Simkanieh,1/1/1981,Short Term Care,yes
+102,El Ouyoun (Lebanese Ophth. Hosp.),40,Chouf/Aley,Aley,1/1/1981,Both,Yes
+49,Ain Wazein Hospital,137,Chouf/Aley,Ain Wazein - El Chouf,1/1/1978,Short Term Care,yes
+77,Hamlin,40,Chouf/Aley,Hammana,1/1/1905,Short Term Care,no
+87,El Arz,50,Metn/Baabda,Zalka,1/1/1978,Both,yes
+74,Eye & Ear Hospital International,50,Metn/Baabda,Naccache - Mar Mansour Street - Near MTV,16/10/1995,Short Term Care,Yes
+63,St Joseph Hospital - Raymond & Aida Najjar Medical Center,159,Metn/Baabda,Dora - Baouchrieh,1/1/1952,Short Term Care,yes
+72,Hôpital Sainte Thérèse,130,Metn/Baabda,Hadath,1/1/1949,Both,yes
+55,Saideh,600,Metn/Baabda,Antelias,1/1/1946,Long Term Care,yes
+8,Bhannes,78,Metn/Baabda,Bhannes,1/1/1908,Both,yes
+39,Hopital Dr S. Serhal,60,Metn/Baabda,"El Rabieh, Rue Michael Serhal",02-11-1982,Short Term Care,Yes
+47,Mount Lebanon Hospital,150,Metn/Baabda,Baabda,1/1/1995,Short Term Care,yes
+103,Dar Sami Kodsi,85,Metn/Baabda,Atchaneh - Bikfaya,1/1/1970,Long Term Care,Yes
+105,Sacre Coeur,234,Metn/Baabda,Brazilia-Baabda,1848,Both,Yes
+106,Abou Jaoude Hospital S.A.L,112,Metn/Baabda,"Jal El Dib, Rue Principal, Near Eglise Ste Takla",1/1/1961,Short Term Care,yes
+142,Dar El Rahmeh,300,Metn/Baabda,Ain Saadeh,1971,Long Term Care,yes
+143,El Amal Institute for Disabeled,50,Metn/Baabda,Broumana - Imb Mounira Solh - Near Fakhreddine restaurant,-,Long Term Care,yes
+111,Beit Chabab,130,Metn/Baabda,Beit Chabab,1/1/1976,Both,yes
+132,Haroun,95,Metn/Baabda,Amaret Chalhoub-Zalka,1985,Short Term Care,yes
+133,Libano-Canadien,100,Metn/Baabda,Sin El Fil,-07/04/2000,Short Term Care,yes
+134,Maarbes,20,Metn/Baabda,Fournel Chibak,-,Short Term Care,yes
+136,St Charles,150,Metn/Baabda,Fayadieh,1908,Short Term Care,Yes
+137,Psychiatric Hospital of the Cross (Jal El Dib),907,Metn/Baabda,Jal EL Dib - Deir El Salib Street,1/1/1951,Both use Short Term Care / Long Term psychiatric C,yes
+217,Middle East Institute of Health,200,Metn/Baabda,"Bsalim main road, Mezher street",2003,Comprehensive Care center,yes
+226,Bitar,15,Metn/Baabda,Sabtieh - Rue Ferdous,-,short term care,yes
+228,Clinique du Levant,81,Metn/Baabda,,-january 2004,short term care,Yes
+229,Asile Maronite des Vieillards,98,Metn/Baabda,-,-,Long Term Care,yes
+231,Bellevue Medical Center,150,Metn/Baabda,Mansourieh El Metn- Qanater Zbaidah,July 2009,Short Term Care,yes
+203,Al-Hayat hospital,120,Metn/Baabda,Boulevard Chiah - Hazmieh,7/7/1967,Short Term Care,yes
+204,Hopital Hayek,50,Metn/Baabda,Sin El Fil - Horch Tabet - Rue Emir Bechir,1/1/1972,Short Term Care,yes
+205,Arz hospital,70,Metn/Baabda,Zalka - Metn - Liban,1/1/1987,Short Term Care,Yes
+234,Dar El Chifaa,50,North Lebanon,,,Short Term Care,no
+235,Dar Al Zahraa,0,North Lebanon,Tripoli,,,no
+171,Akkar Rahal,100,North Lebanon,Halba - Akkar,-1982,Short Term Care,Yes
+172,Borgi,35,North Lebanon,Amioune,1951,Short Term Care,Yes
+173,Hopital Chahine,50,North Lebanon,Rue Mohamed Karamé - Tripoli - Liban Nord,1/1/1951,Short and mid term Care,yes
+174,Al Bissar Hospital,50,North Lebanon,Tripoli - Lebanon,1/1/1996,Short Term Care,yes
+175,El Kheir,82,North Lebanon,El Menieh,-,Short Term Care,yes
+176,HOPITAL AL-KOURA,62,North Lebanon,Koura,01/01/1994,Short Term Care,yes
+177,El Youssef Hospital Center,120,North Lebanon,Halba Akkar - North Lebanon principal road,1/1/1995,Short Term Care,yes
+178,Hopital Albert HAYKEL. S.A.L,120,North Lebanon,Ras Maska - Koura - Haykalieh area - North Lebanon,1/1/1969,Short Term Care,yes
+180,New Hospital Mazloum,75,North Lebanon,Tripoli Boulevard,1960,Short Term Care,yes
+182,Mounla hospital,84,North Lebanon,Tripoli city - Mounla Street,1/1/1957,Short Term Care,yes
+183,Hopital Notre Dame de la Paix,150,North Lebanon,Kobayat - Chwyta,1/1/1998,Short Term Care,yes
+184,Hopital Saydet Zgharta / HSZ,149,North Lebanon,Zgharta - Al Roueiss,August 1983,Short Term Care and Long Term Care,yes
+185,Centre Hospitalier du Nord,144,North Lebanon,Zghorta,-,Short Term Care,yes
+145,Social Services,125,North Lebanon,Tripoli,-,Long Term Care,yes
+89,"Al Salam, (La Paix)",177,North Lebanon,"Tripoli, South entrance - Roundabout El Salam, Rond Point La Paix.",1/1/1996,Short Term Care,Yes
+52,Nini hospital s.a.l,128,North Lebanon,Tripoli - Lebanon - P.O.Box: 1434,1928,Short and mid Term Care,Yes
+57,Islamy,164,North Lebanon,Azmy Strt-Tripoli,1/1/1945,Both,yes
+86,Dr. Youssef Rahban Hospital s.a.r.l.,127,North Lebanon,Mejdlaya - Zghorta - Liban Nord,1986,Both,yes
+80,AL-Hanan,35,North Lebanon,Tripoli - Al-mitein road - Tawjih street,01/01/1994,Short term care,yes
+84,Raii,100,South Lebanon,El Ghazieh - Saida,1/1/1984,Both,yes
+90,Jabal Amel,120,South Lebanon,Tyr - Jal Al Baher,1/1/1982,Short Term Care,yes
+99,Jbeily,52,South Lebanon,Hlalieh-Saida,1/1/1984,Both,yes
+100,Ghandour hospital,28,South Lebanon,Nabatieh - El Hamid Medical Center - Nabatieh El Fouka - Nabatieh,1/1/1990,Short Term Care,yes
+107,Alaeddine hospital,100,South Lebanon,Sarafand main road - Zahrani,1/1/1978,Short Term Care,yes
+110,Labib Medical Center s.a.l.,120,South Lebanon,Abou Zahr Street P.O.box: 414 Saida - Lebanon,1/1/1972,Short Term Care,Yes
+104,Fanar,240,South Lebanon,Marwanieh,1/1/1962,Long Term Care,Yes
+113,Kassab,47,South Lebanon,Hlaliye - Saida,1/1/1981,Short Term Care,yes
+191,Dalla'a General Hospital,100,South Lebanon,Saida,1979,Short Term Care,yes
+194,Hammoud,300,South Lebanon,Saida,1/1/1966,Short Term Care,yes
+196,Hiram hospital,90,South Lebanon,Tyr - Jal EL Baher - South Lebanon,01/08/1997,Short Term Care,Yes
+197,Al-Janoub hospital (Shuayb),90,South Lebanon,"Ma'arouf Saad Boulvard, Saida - Lebanon",1/1/1969,Short Term Care,yes
+198,Kharroubi Gen.Hospital,56,South Lebanon,Sarafand,1998,Short Term Care,yes
+200,Secours Populaire Libanais-Nabatieh,75,South Lebanon,Nabatieh,-1985,Short Term Care,Yes
+201,najm,80,South Lebanon,Tyr,01/01/1994,Short Term Care,yes
+220,Ragheb Harb,37,South Lebanon,Nabatieh,1996,Short Term Care,yes
+221,Islamic Health Institution,40,South Lebanon,bent jbeil- saf alhawa,-,Short Term Care,yes
