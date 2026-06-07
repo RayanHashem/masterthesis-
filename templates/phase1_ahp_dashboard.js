@@ -1114,6 +1114,10 @@ function initFilters() {
     const toggleBtn = document.getElementById('panel-toggle-btn');
     if (toggleBtn) toggleBtn.addEventListener('click', togglePanel);
 
+    // Dataset selector
+    const dsSel = document.getElementById('dataset-select');
+    if (dsSel) dsSel.addEventListener('change', e => setActiveDataset(e.target.value));
+
     initMapRefs();
     refreshSupplyLayer();
     initModelNormScores();

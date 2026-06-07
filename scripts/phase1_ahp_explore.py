@@ -1467,6 +1467,13 @@ with open(os.path.join(TEMPLATES_DIR, 'phase1_ahp_dashboard.js'), 'r', encoding=
 panel_html = f"""            <div class="panel-header">
                 <h1>Lebanon EMS – AHP Coverage Analysis</h1>
                 <p>Population-Weighted Gap Assessment (Experimental)</p>
+                <div class="dataset-selector">
+                    <label for="dataset-select">Dataset</label>
+                    <select id="dataset-select">
+                        <option value="ems" selected>EMS Stations</option>
+                        <option value="hospitals">Hospitals</option>
+                    </select>
+                </div>
             </div>
             <div class="tab-bar">
                 <button class="tab-btn active" data-tab="model" onclick="switchTab('model')">Model</button>

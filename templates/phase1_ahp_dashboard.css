@@ -1500,3 +1500,15 @@ body {
     .panel-toggle { right: 0 !important; }
     .map-legend { top: 104px; max-width: 160px; }
 }
+
+.dataset-selector { display: flex; align-items: center; gap: 8px; margin-top: 8px; }
+.dataset-selector label { font-size: 12px; font-weight: 600; color: #cfd8dc; }
+.dataset-selector select {
+    flex: 1;
+    padding: 6px 8px;
+    border-radius: 6px;
+    border: 1px solid #37474f;
+    background: #263238;
+    color: #eceff1;
+    font-size: 13px;
+}
