@@ -3,6 +3,7 @@
 Input:  data/lebanon_healthsites.geojson  (Global Healthsites, HDX, ODbL)
 Output: data/lebanon_hospitals.csv  and  data/lebanon_hospitals.geojson
 """
+import csv
 import json
 import os
 import statistics
@@ -13,8 +14,9 @@ SRC = os.path.join(DATA_DIR, 'lebanon_healthsites.geojson')
 OUT_CSV = os.path.join(DATA_DIR, 'lebanon_hospitals.csv')
 OUT_GEOJSON = os.path.join(DATA_DIR, 'lebanon_hospitals.geojson')
 
-# Lebanon bounding box (lon_min, lon_max, lat_min, lat_max)
-BBOX = (35.0, 37.0, 33.0, 34.8)
+# Lebanon bounding box
+LON_MIN, LON_MAX = 35.0, 37.0
+LAT_MIN, LAT_MAX = 33.0, 34.8
 
 
 def centroid(geom):
@@ -31,6 +33,7 @@ def centroid(geom):
     elif t == 'MultiLineString':
         ring = c[0]
     else:
+        print(f"WARN: unsupported geometry type '{t}', skipping")
         return None
     xs = [p[0] for p in ring]
     ys = [p[1] for p in ring]
@@ -60,7 +63,7 @@ def main():
         if not cc:
             continue
         lon, lat = cc
-        if not (BBOX[0] <= lon <= BBOX[1] and BBOX[2] <= lat <= BBOX[3]):
+        if not (LON_MIN <= lon <= LON_MAX and LAT_MIN <= lat <= LAT_MAX):
             continue
         rows.append({
             'name': (p.get('name:en') or p.get('name') or '').strip(),
@@ -97,18 +100,17 @@ def main():
         del r['beds_raw']
 
     # --- Assertions (validation gate) ---
-    assert len(rows) > 100, f"Expected >100 hospitals, got {len(rows)}"
+    assert len(rows) > 100, f"Expected >100 hospitals, got {len(rows)}"  # Lebanon has ~200 registered hospitals; 100 is a conservative floor
     for r in rows:
         assert isinstance(r['lat'], float) and isinstance(r['lon'], float)
-        assert BBOX[2] <= r['lat'] <= BBOX[3], f"lat out of bbox: {r}"
-        assert BBOX[0] <= r['lon'] <= BBOX[1], f"lon out of bbox: {r}"
+        assert LAT_MIN <= r['lat'] <= LAT_MAX, f"lat out of bbox: {r}"
+        assert LON_MIN <= r['lon'] <= LON_MAX, f"lon out of bbox: {r}"
         assert isinstance(r['beds'], int)
         assert isinstance(r['beds_estimated'], bool)
     assert len({r['osm_id'] for r in rows if r['osm_id']}) == \
         len([r for r in rows if r['osm_id']]), "duplicate osm_id remains"
 
     # --- Write CSV ---
-    import csv
     fields = ['name', 'lat', 'lon', 'beds', 'beds_estimated',
               'operator', 'operator_type', 'osm_id', 'geom_type']
     with open(OUT_CSV, 'w', newline='', encoding='utf-8') as fh:
