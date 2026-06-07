@@ -162,10 +162,50 @@ These thresholds are also adjustable live in the dashboard.
 - **Boundaries** — [GADM 4.1](https://gadm.org), admin level 2
 - **Population** — [WorldPop 2024 CN](https://www.worldpop.org), 1 km constrained
 - **Roads** — OpenStreetMap via OSMnx (cached to `data/road_graph_lebanon.graphml`)
+- **Hospitals** — [Lebanon Healthsites](https://data.humdata.org/dataset/lebanon-healthsites)
+  (Global Healthsites Mapping Project, via HDX), **ODbL** licensed. Cleaned to
+  201 hospital points by `scripts/prepare_hospitals.py` → `data/lebanon_hospitals.csv`.
+  ⚠️ ODbL requires **attribution + share-alike** on any redistributed derived data.
 - **Response standard** — Lebanese Red Cross / IFRC INP 2023: *80 % of calls
   within 9 min, 85 % within 13 min*
 - **Licensing** — Lebanese Ministry of Public Health, Karar No. 473/2021
 - **Critical-call benchmark** — European standard, 8 min for life-threatening calls
+
+## Phase 2 — Hospitals dataset & dataset selector
+
+The dashboard now supports **two datasets**, chosen via the **Dataset** dropdown
+in the panel header:
+
+- **EMS Stations** — the original Phase 1 analysis (unchanged).
+- **Hospitals** — the same AHP engine run with hospitals as the *supply layer*.
+
+Switching the dropdown re-renders the map markers, AHP choropleth, district
+popups, stat cards, Model tab, and rankings client-side (`setActiveDataset` in
+`templates/phase1_ahp_dashboard.js`). The analysis pipeline was generalized into
+`run_supply_analysis(...)` in `scripts/phase1_ahp_explore.py`, called once per
+dataset.
+
+**Hospital model differs from EMS in three ways:**
+
+1. **4th criterion — Bed Capacity Gap.** Inverse of hospital beds per 1,000
+   population per district (fewer beds per capita → higher priority). Default
+   weights: Travel-Time Gap 0.30, Population Density 0.30, Exposed Population
+   0.25, Bed Capacity Gap 0.15 (population-dominant by design, so isolated
+   remoteness alone does not drive priority).
+2. **30-minute coverage threshold** (vs 10 min for EMS) — the "access to
+   definitive care" standard. Tunable live in the Model tab.
+3. **Bed counts are mostly estimated.** Only ~3 of 201 hospitals carry a tagged
+   bed count in OSM; the rest are median-imputed (≈71 beds) and **flagged as
+   "(estimated)" in the map popup**. In practice the Bed Capacity Gap criterion
+   therefore behaves closer to a *hospital-density-per-capita* signal than a true
+   bed-capacity measure — interpret accordingly.
+
+**Known follow-ups (not yet implemented):**
+
+- Rule-based **hospital proposals** are shipped empty (the grid/clustering logic
+  is currently EMS-specific); enabling them means generalizing the grid step to
+  accept any supply layer's travel-time field.
+- The static map **legend** does not yet update with the selected dataset.
 
 ### Limitations
 
