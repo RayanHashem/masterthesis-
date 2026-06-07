@@ -128,6 +128,15 @@ except Exception as e:
     print(f"✗ Error loading EMS stations: {e}")
     sys.exit(1)
 
+# ---- Phase 2: load hospitals dataset ----
+HOSPITALS_FILE = os.path.join(DATA_DIR, 'lebanon_hospitals.csv')
+hospitals_df = pd.read_csv(HOSPITALS_FILE)
+hospitals_gdf = gpd.GeoDataFrame(
+    hospitals_df,
+    geometry=gpd.points_from_xy(hospitals_df['lon'], hospitals_df['lat']),
+    crs='EPSG:4326')
+print(f"  ✓ Loaded {len(hospitals_gdf)} hospitals")
+
 # ============================================================================
 # 3. LOAD POPULATION RASTER AND CALCULATE DISTRICT POPULATIONS
 # ============================================================================
@@ -590,6 +599,31 @@ ems_result = run_supply_analysis(
 districts_agg = ems_result['districts']
 coverage_gdf = ems_result['coverage_gdf']
 best_time_s = ems_result['best_time_s']
+
+# ---- Phase 2: hospital supply analysis (coverage + AHP) ----
+HOSPITAL_WEIGHTS = (0.30, 0.30, 0.25, 0.15)
+HOSPITAL_THRESHOLD_MIN = 30
+HOSPITAL_CRITERIA_CONFIG = [
+    {'id': 'access_gap', 'label': 'Travel Time Gap',
+     'description': 'Min. road travel time to nearest hospital (higher = worse)',
+     'weight': 0.30, 'norm_key': 'norm_access_gap'},
+    {'id': 'pop_density', 'label': 'Population Density',
+     'description': 'Population per km² in the district',
+     'weight': 0.30, 'norm_key': 'norm_pop_density'},
+    {'id': 'exposed_pop', 'label': 'Exposed Population',
+     'description': 'Population outside the coverage threshold (recalculated live)',
+     'weight': 0.25, 'norm_key': 'norm_exposed_pop', 'dynamic': True},
+    {'id': 'bed_gap', 'label': 'Bed Capacity Gap',
+     'description': 'Inverse of hospital beds per 1,000 population (fewer beds = higher need). NOTE: most bed counts are estimated.',
+     'weight': 0.15, 'norm_key': 'norm_bed_gap'},
+]
+hosp_result = run_supply_analysis(
+    districts_agg, G,
+    hospitals_gdf['lon'].values, hospitals_gdf['lat'].values,
+    HOSPITAL_THRESHOLD_MIN, HOSPITAL_WEIGHTS, label='Hospital',
+    supply_beds=hospitals_gdf['beds'].values,
+)
+hosp_districts = hosp_result['districts']
 
 # ============================================================================
 # 5f. PHASE 4.1 — CREATE 1KM ANALYSIS GRID FROM POPULATION RASTER
@@ -1426,6 +1460,45 @@ for idx in ems_valid.index:
     })
 stations_json = json.dumps(stations_data)
 
+# ---- Phase 2: hospital districts-data + hospital supply array ----
+def build_hospital_districts_data(d):
+    out = []
+    for _, row in d.iterrows():
+        tt = row.get('min_travel_time_min', None)
+        out.append({
+            'district_name': str(row.get('NAME_2', 'Unknown')),
+            'governorate': str(row.get('NAME_1', 'Unknown')),
+            'population': float(row.get('population', 0)),
+            'area_km2': round(float(row.get('area_km2', 0)), 2),
+            'pop_density': round(float(row.get('pop_density', 0)), 2),
+            'exposed_population': float(row.get('exposed_population', 0)),
+            'ahp_score': float(row.get('ahp_score', 0)),
+            'ahp_priority': str(row.get('ahp_priority', 'Low')),
+            'min_travel_time_min': round(float(tt), 2) if tt is not None and not pd.isna(tt) else None,
+            'norm_access_gap': round(float(row.get('norm_access_gap', 0)), 4),
+            'norm_pop_density': round(float(row.get('norm_pop_density', 0)), 4),
+            'norm_exposed_pop': round(float(row.get('norm_exposed_pop', 0)), 4),
+            'norm_bed_gap': round(float(row.get('norm_bed_gap', 0)), 4),
+            'beds_per_1000': round(float(row.get('beds_per_1000', 0)), 2),
+        })
+    return out
+
+hospital_districts_data = build_hospital_districts_data(hosp_districts)
+
+hospitals_supply = []
+for _, r in hospitals_df.iterrows():
+    nm = str(r['name']).strip()
+    hospitals_supply.append({
+        'lat': float(r['lat']), 'lon': float(r['lon']),
+        'name': nm if nm else 'Unnamed hospital',
+        'beds': int(r['beds']), 'beds_estimated': bool(r['beds_estimated']),
+        'operator': str(r.get('operator', '') or ''),
+    })
+
+# Hospital proposals are deferred to a follow-up task (the grid/clustering
+# logic is EMS-specific); ship empty presets for now.
+hospital_candidates_by_preset = {'balanced': [], 'access': [], 'population': []}
+
 # Lebanon bounds for Reset Map View
 LEBANON_BOUNDS = [[33.05, 35.09], [34.69, 36.62]]
 
@@ -1544,15 +1617,33 @@ all_presets_json = json.dumps(candidates_by_preset_json)
 balanced_json = json.dumps(candidates_by_preset_json.get('balanced', []))
 
 # Build JS data block (Python-computed constants injected into JS scope)
-js_data = f"""        const CRITERIA_CONFIG = {json.dumps(CRITERIA_CONFIG)};
-        const DEFAULT_COVERAGE_THRESHOLD = {DEFAULT_COVERAGE_THRESHOLD_MIN};
-        const DISTRICTS = {districts_json};
-        const STATIONS = {stations_json};
+datasets_obj = {
+    'ems': {
+        'label': 'EMS Stations',
+        'supplyLabel': 'EMS Stations',
+        'supplyIcon': 'ambulance',
+        'threshold': EMS_THRESHOLD_MIN,
+        'criteria': CRITERIA_CONFIG,
+        'districts': districts_data,            # existing EMS districts list
+        'supply': stations_data,                # existing EMS supply list
+        'candidatesByPreset': candidates_by_preset_json,
+    },
+    'hospitals': {
+        'label': 'Hospitals',
+        'supplyLabel': 'Hospitals',
+        'supplyIcon': 'hospital',
+        'threshold': HOSPITAL_THRESHOLD_MIN,
+        'criteria': HOSPITAL_CRITERIA_CONFIG,
+        'districts': hospital_districts_data,
+        'supply': hospitals_supply,
+        'candidatesByPreset': hospital_candidates_by_preset,
+    },
+}
+js_data = f"""        const DATASETS = {json.dumps(datasets_obj)};
+        let ACTIVE_DATASET = 'ems';
         const GOVERNORATES = {json.dumps(governorates_list)};
         const MAX_POP = {max_population};
-        const LEBANON_BOUNDS = {json.dumps(LEBANON_BOUNDS)};
-        var CANDIDATES_BY_PRESET = {all_presets_json};
-        var CANDIDATES = {balanced_json};"""
+        const LEBANON_BOUNDS = {json.dumps(LEBANON_BOUNDS)};"""
 
 # Assemble final HTML by replacing sentinels in the template
 dashboard_html = (
