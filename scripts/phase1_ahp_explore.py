@@ -1485,14 +1485,20 @@ def build_hospital_districts_data(d):
 
 hospital_districts_data = build_hospital_districts_data(hosp_districts)
 
+def _clean_str(val):
+    # Blank CSV cells arrive as NaN; str(NaN) == 'nan' (truthy), so coerce to ''.
+    if val is None or pd.isna(val):
+        return ''
+    return str(val).strip()
+
 hospitals_supply = []
 for _, r in hospitals_df.iterrows():
-    nm = str(r['name']).strip()
+    nm = _clean_str(r['name'])
     hospitals_supply.append({
         'lat': float(r['lat']), 'lon': float(r['lon']),
         'name': nm if nm else 'Unnamed hospital',
         'beds': int(r['beds']), 'beds_estimated': bool(r['beds_estimated']),
-        'operator': str(r.get('operator', '') or ''),
+        'operator': _clean_str(r.get('operator', '')),
     })
 
 # Hospital proposals are deferred to a follow-up task (the grid/clustering
