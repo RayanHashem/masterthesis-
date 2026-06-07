@@ -407,7 +407,7 @@ CRITERIA_CONFIG = [
 
 
 def run_supply_analysis(districts, G, supply_lons, supply_lats,
-                        threshold_min, weights, label='supply'):
+                        threshold_min, weights, label='supply', supply_beds=None):
     """Run travel-time coverage + AHP scoring for one supply layer.
 
     Returns {'districts': <copy with min_travel_time_min, covered, norm_* ,
@@ -519,17 +519,37 @@ def run_supply_analysis(districts, G, supply_lons, supply_lats,
     d['norm_pop_density'] = minmax_normalize(d['pop_density'])
     d['norm_exposed_pop'] = minmax_normalize(d['exposed_population'])
 
-    _district_raw_score = (
-        weights[0] * d['norm_access_gap'] +
-        weights[1] * d['norm_pop_density'] +
-        weights[2] * d['norm_exposed_pop']
-    )
-    d['ahp_score'] = _district_raw_score.round(3)
+    if supply_beds is not None and len(weights) == 4:
+        from shapely.geometry import Point as _P
+        supply_pts = gpd.GeoDataFrame(
+            {'beds': list(supply_beds)},
+            geometry=[_P(lo, la) for lo, la in zip(supply_lons, supply_lats)],
+            crs='EPSG:4326')
+        if supply_pts.crs != d.crs:
+            supply_pts = supply_pts.to_crs(d.crs)
+        d_reset = d.reset_index(drop=True).reset_index()  # 'index' col = positional district index
+        joined = gpd.sjoin(supply_pts, d_reset, how='left', predicate='within')
+        # The positional district index travels through the join in the 'index' column
+        # (geopandas may name the right index 'index_right' or 'index_right0' depending
+        # on version/collisions, so we key off the explicit 'index' column instead).
+        beds_by_dist = joined.dropna(subset=['index']).groupby('index')['beds'].sum()
+        d['_beds_total'] = [float(beds_by_dist.get(i, 0.0)) for i in range(len(d))]
+        d['beds_per_1000'] = d.apply(
+            lambda r: (r['_beds_total'] / (r['population'] / 1000.0)) if r['population'] > 0 else 0.0,
+            axis=1)
+        # Cost criterion: fewer beds per capita => higher priority => invert the benefit normalization
+        d['norm_bed_gap'] = 1.0 - minmax_normalize(d['beds_per_1000'])
+        raw = (weights[0] * d['norm_access_gap'] + weights[1] * d['norm_pop_density']
+               + weights[2] * d['norm_exposed_pop'] + weights[3] * d['norm_bed_gap'])
+    else:
+        raw = (weights[0] * d['norm_access_gap'] + weights[1] * d['norm_pop_density']
+               + weights[2] * d['norm_exposed_pop'])
+    d['ahp_score'] = raw.round(3)
 
     # Quantile-based priority: top 20% = High, next 30% = Medium, bottom 50% = Low
     # Avoids fixed-threshold issue where no district reaches 0.66 in Lebanon's context
-    _d_q80 = _district_raw_score.quantile(0.80)
-    _d_q50 = _district_raw_score.quantile(0.50)
+    _d_q80 = raw.quantile(0.80)
+    _d_q50 = raw.quantile(0.50)
 
     def ahp_priority_label(score):
         if score >= _d_q80:
@@ -538,7 +558,7 @@ def run_supply_analysis(districts, G, supply_lons, supply_lats,
             return 'Medium'
         return 'Low'
 
-    d['ahp_priority'] = _district_raw_score.apply(ahp_priority_label)
+    d['ahp_priority'] = raw.apply(ahp_priority_label)
 
     # Drop only the internal raw column; keep norm_* columns so they can be shipped to JS
     d.drop(columns=['_c1_raw'], inplace=True)
