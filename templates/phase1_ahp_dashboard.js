@@ -18,6 +18,7 @@ let highlightTimeout = null;
 let candidateHighlightCircle = null;
 let candidatesLayer = null;       // direct ref to the Folium FeatureGroup
 let candidatesVisible = true;     // tracks current state
+let supplyLayerGroup = null;
 
 function formatNum(n) {
     return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -377,6 +378,31 @@ function setCandidatesLayerVisible(show) {
 
 function toggleCandidatesLayer() {
     setCandidatesLayerVisible(!candidatesVisible);
+}
+
+function refreshSupplyLayer() {
+    if (!map) return;
+    if (supplyLayerGroup) { map.removeLayer(supplyLayerGroup); supplyLayerGroup = null; }
+    const isHosp = ACTIVE_DATASET === 'hospitals';
+    const color = isHosp ? '#c0392b' : '#2c7fb8';
+    const markers = (STATIONS || []).map(s => {
+        const m = L.circleMarker([s.lat, s.lon], {
+            radius: 5, color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.9,
+        });
+        let html;
+        if (isHosp) {
+            const est = s.beds_estimated ? ' <em>(estimated)</em>' : '';
+            html = `<b>${escapeHtml(s.name || 'Unnamed hospital')}</b>`
+                 + `<br>Beds: ${s.beds}${est}`
+                 + (s.operator ? `<br>${escapeHtml(s.operator)}` : '');
+        } else {
+            html = `<b>EMS Station</b>`
+                 + (s.district_name ? `<br>${escapeHtml(s.district_name)}` : '');
+        }
+        m.bindPopup(html);
+        return m;
+    });
+    supplyLayerGroup = L.layerGroup(markers).addTo(map);
 }
 
 function initCandidatesLayer() {
@@ -1089,6 +1115,7 @@ function initFilters() {
     if (toggleBtn) toggleBtn.addEventListener('click', togglePanel);
 
     initMapRefs();
+    refreshSupplyLayer();
     initModelNormScores();
     renderModelTab();
     renderFiltersTab();

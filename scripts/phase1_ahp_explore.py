@@ -1058,63 +1058,6 @@ folium.GeoJson(
 
 print(f"  ✓ Added {len(districts_agg)} district boundaries")
 
-# Add EMS stations with red cross icons
-print("  Adding EMS stations...")
-ems_layer = folium.FeatureGroup(name='Existing EMS', show=True)
-for idx, row in ems_valid.iterrows():
-    lat = row[lat_col]
-    lon = row[lon_col]
-    
-    # Create red cross icon using DivIcon
-    icon_html = """
-    <div style="
-        width: 12px;
-        height: 12px;
-        background-color: white;
-        border: 2px solid #e74c3c;
-        border-radius: 50%;
-        position: relative;
-    ">
-        <div style="
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 2px;
-            height: 8px;
-            background-color: #e74c3c;
-        "></div>
-        <div style="
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%) rotate(90deg);
-            width: 2px;
-            height: 8px;
-            background-color: #e74c3c;
-        "></div>
-    </div>
-    """
-    
-    popup_text = "<b>EMS Station</b><br>"
-    for col in ems_df.columns:
-        if pd.notna(row[col]):
-            popup_text += f"<b>{col}:</b> {row[col]}<br>"
-    
-    folium.Marker(
-        location=[lat, lon],
-        icon=DivIcon(
-            html=icon_html,
-            icon_size=(12, 12),
-            icon_anchor=(6, 6)
-        ),
-        popup=folium.Popup(popup_text, max_width=300)
-    ).add_to(ems_layer)
-
-print(f"  ✓ Added {len(ems_valid)} EMS stations")
-
-ems_layer.add_to(m)
-
 # Add population heatmap
 print("  Adding population heatmap...")
 sample_step = max(1, min(50, raster_width // 100, raster_height // 100))
