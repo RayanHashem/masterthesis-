@@ -407,12 +407,12 @@ CRITERIA_CONFIG = [
 
 
 def run_supply_analysis(districts, G, supply_lons, supply_lats,
-                        threshold_min, weights, criteria_config):
+                        threshold_min, weights, label='supply'):
     """Run travel-time coverage + AHP scoring for one supply layer.
 
     Returns {'districts': <copy with min_travel_time_min, covered, norm_* ,
     ahp_score, ahp_priority>, 'coverage_gdf': ..., 'best_time_s': ...}.
-    weights is (w_c1, w_c2, w_c3). criteria_config is embedded per dataset.
+    weights is (w_c1, w_c2, w_c3). label names the supply layer for logging.
     """
     d = districts.copy()
 
@@ -454,7 +454,7 @@ def run_supply_analysis(districts, G, supply_lons, supply_lats,
 
             n_covered = sum(covered_list)
             print(f"  ✓ Added min_travel_time_min and covered to {len(d)} districts")
-            print(f"  ✓ Districts within {threshold_min} min of EMS: {n_covered} / {len(d)}")
+            print(f"  ✓ Districts within {threshold_min} min of {label}: {n_covered} / {len(d)}")
 
             # Build coverage polygon for map (Step 1C): nodes reachable within threshold
             nodes_covered = [n for n, t in best_time_s.items() if t <= threshold_min * 60]
@@ -565,7 +565,7 @@ EMS_THRESHOLD_MIN = 10
 ems_result = run_supply_analysis(
     districts_agg, G,
     ems_valid[lon_col].values, ems_valid[lat_col].values,
-    EMS_THRESHOLD_MIN, EMS_WEIGHTS, CRITERIA_CONFIG,
+    EMS_THRESHOLD_MIN, EMS_WEIGHTS, label='EMS',
 )
 districts_agg = ems_result['districts']
 coverage_gdf = ems_result['coverage_gdf']
