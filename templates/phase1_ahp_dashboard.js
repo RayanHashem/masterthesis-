@@ -63,6 +63,11 @@ function renderAhpSummary(filtered) {
         { label: 'Medium Priority', count: counts.Medium, color: '#f39c12' },
         { label: 'Low Priority',    count: counts.Low,    color: '#27ae60' },
     ];
+    // Hospital dataset: add an absolute "needs new capacity" count.
+    if (ACTIVE_DATASET === 'hospitals') {
+        const needN = filtered.filter(d => d.need_class === 'NEED').length;
+        cards.push({ label: 'Need Capacity', count: needN, color: '#c0392b' });
+    }
     document.getElementById('ahp-summary-cards').innerHTML = cards.map(c =>
         `<div class="stat-card" style="border-color:${c.color}">
             <div class="label">${c.label}</div>
@@ -88,8 +93,18 @@ function renderAhpRanking(filtered) {
     const priorityColor = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
     const priorityClass = { High: 'ahp-priority-high', Medium: 'ahp-priority-medium', Low: 'ahp-priority-low' };
 
+    // Hospital dataset adds an absolute capacity verdict vs the national benchmark.
+    const isHosp = ACTIVE_DATASET === 'hospitals';
+    const needColor = { NEED: '#e74c3c', ADEQUATE: '#7f8c8d', OVERSUPPLIED: '#27ae60' };
+    const needText  = { NEED: 'NEED', ADEQUATE: 'Adequate', OVERSUPPLIED: 'No need' };
+    const needCell = d => {
+        const nc = d.need_class || 'ADEQUATE';
+        return `<td><span class="need-badge" style="background:${needColor[nc] || '#7f8c8d'}">`
+             + `${needText[nc] || nc}</span></td>`;
+    };
+
     let html = `<table class="ahp-ranking-table"><thead><tr>
-        <th>#</th><th>District</th><th>Priority</th><th>Score</th>
+        <th>#</th><th>District</th><th>Priority</th>${isHosp ? '<th>Capacity</th>' : ''}<th>Score</th>
     </tr></thead><tbody>`;
 
     rows.forEach((d, i) => {
@@ -101,6 +116,7 @@ function renderAhpRanking(filtered) {
             <td style="color:#666">${i + 1}</td>
             <td>${d.district_name}</td>
             <td class="${cls}">${d.ahp_priority}</td>
+            ${isHosp ? needCell(d) : ''}
             <td class="score-bar-cell">
                 <div class="score-bar-wrap">
                     <div class="score-bar-bg">

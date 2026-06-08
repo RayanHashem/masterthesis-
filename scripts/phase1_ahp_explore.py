@@ -625,6 +625,32 @@ hosp_result = run_supply_analysis(
 )
 hosp_districts = hosp_result['districts']
 
+# ── Phase 2.5: NEED / ADEQUATE / OVERSUPPLIED classification ──────────────────
+# Compares each district's beds-per-1,000 against Lebanon's own national average
+# (computed from the data), plus an access clause for districts far from any
+# hospital. Gives an *absolute* need verdict, not just a relative ranking.
+# CAVEAT: 166/203 hospital bed counts are still median-estimated, so this is
+# directional — rural districts with few hospitals can be distorted.
+_tot_beds = float(hosp_districts['_beds_total'].sum()) if '_beds_total' in hosp_districts.columns else 0.0
+_tot_pop  = float(hosp_districts['population'].sum())
+BED_BENCHMARK = round((_tot_beds / _tot_pop * 1000.0), 2) if _tot_pop > 0 else 0.0
+ACCESS_NEED_MIN = 25  # min travel time to nearest hospital that signals an access gap
+
+def _need_class(row):
+    bpk = float(row.get('beds_per_1000', 0) or 0)
+    tt  = row.get('min_travel_time_min', None)
+    far = (tt is not None and not pd.isna(tt) and tt >= ACCESS_NEED_MIN)
+    if bpk < 0.75 * BED_BENCHMARK or far:
+        return 'NEED'
+    if bpk > 1.50 * BED_BENCHMARK:
+        return 'OVERSUPPLIED'
+    return 'ADEQUATE'
+
+hosp_districts['need_class'] = hosp_districts.apply(_need_class, axis=1)
+_need_counts = hosp_districts['need_class'].value_counts().to_dict()
+print(f"  ✓ Bed benchmark (national avg): {BED_BENCHMARK} beds/1,000")
+print(f"  ✓ NEED/ADEQUATE/OVERSUPPLIED: {_need_counts}")
+
 # ============================================================================
 # 5f. PHASE 4.1 — CREATE 1KM ANALYSIS GRID FROM POPULATION RASTER
 # ============================================================================
@@ -1423,6 +1449,7 @@ def build_hospital_districts_data(d):
             'norm_exposed_pop': round(float(row.get('norm_exposed_pop', 0)), 4),
             'norm_bed_gap': round(float(row.get('norm_bed_gap', 0)), 4),
             'beds_per_1000': round(float(row.get('beds_per_1000', 0)), 2),
+            'need_class': str(row.get('need_class', 'ADEQUATE')),
         })
     return out
 
@@ -1593,6 +1620,7 @@ datasets_obj = {
         'districts': hospital_districts_data,
         'supply': hospitals_supply,
         'candidatesByPreset': hospital_candidates_by_preset,
+        'bedBenchmark': BED_BENCHMARK,
     },
 }
 js_data = f"""        const DATASETS = {json.dumps(datasets_obj)};

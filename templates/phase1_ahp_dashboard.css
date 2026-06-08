@@ -1512,3 +1512,15 @@ body {
     color: #eceff1;
     font-size: 13px;
 }
+
+/* Phase 2.5 — hospital capacity NEED/ADEQUATE/OVERSUPPLIED badge */
+.need-badge {
+    display: inline-block;
+    padding: 2px 7px;
+    border-radius: 10px;
+    color: #fff;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+}
