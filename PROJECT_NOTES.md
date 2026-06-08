@@ -162,10 +162,15 @@ These thresholds are also adjustable live in the dashboard.
 - **Boundaries** — [GADM 4.1](https://gadm.org), admin level 2
 - **Population** — [WorldPop 2024 CN](https://www.worldpop.org), 1 km constrained
 - **Roads** — OpenStreetMap via OSMnx (cached to `data/road_graph_lebanon.graphml`)
-- **Hospitals** — [Lebanon Healthsites](https://data.humdata.org/dataset/lebanon-healthsites)
-  (Global Healthsites Mapping Project, via HDX), **ODbL** licensed. Cleaned to
-  201 hospital points by `scripts/prepare_hospitals.py` → `data/lebanon_hospitals.csv`.
+- **Hospital locations** — [Lebanon Healthsites](https://data.humdata.org/dataset/lebanon-healthsites)
+  (Global Healthsites Mapping Project / OpenStreetMap, via HDX), **ODbL** licensed.
+  Cleaned to hospital points by `scripts/prepare_hospitals.py`.
   ⚠️ ODbL requires **attribution + share-alike** on any redistributed derived data.
+- **Hospital bed counts** — [Syndicate of Hospitals in Lebanon](https://www.syndicateofhospitals.org.lb)
+  (the official body for Lebanon's private hospitals). Harvested per-hospital bed
+  counts for 134 hospitals via `scripts/scrape_syndicate_hospitals.py` →
+  `data/lebanon_hospitals_syndicate.csv`, then merged onto the location points by
+  `scripts/enrich_hospital_beds.py`.
 - **Response standard** — Lebanese Red Cross / IFRC INP 2023: *80 % of calls
   within 9 min, 85 % within 13 min*
 - **Licensing** — Lebanese Ministry of Public Health, Karar No. 473/2021
@@ -194,14 +199,32 @@ dataset.
    remoteness alone does not drive priority).
 2. **30-minute coverage threshold** (vs 10 min for EMS) — the "access to
    definitive care" standard. Tunable live in the Model tab.
-3. **Bed counts are mostly estimated.** Only ~3 of 201 hospitals carry a tagged
-   bed count in OSM; the rest are median-imputed (≈71 beds) and **flagged as
-   "(estimated)" in the map popup**. In practice the Bed Capacity Gap criterion
-   therefore behaves closer to a *hospital-density-per-capita* signal than a true
-   bed-capacity measure — interpret accordingly.
+3. **Bed counts — real where available, estimated otherwise.** OSM tags beds for
+   only 3 hospitals, so we enrich with the Syndicate of Hospitals data
+   (`scripts/enrich_hospital_beds.py`):
+   - **27** hospitals matched by name (Jaccard ≥ 0.6, manually verified — zero
+     false positives) → real beds.
+   - **7** large hospitals hand-verified individually (Wikidata / Nominatim
+     results that name the hospital), 5 of which spatially merged onto existing
+     OSM points within 300 m, 2 added as new points.
+   - Result: **37 of 203 hospitals now carry real bed counts** (was 3). The
+     remaining 166 are median-imputed (≈100 beds) and **flagged "(estimated)" in
+     the map popup**. Each row records its provenance in a `beds_source` column.
+   - The real beds skew to the **largest** facilities (Dar Al-Ajaza 700, AUBMC
+     400, Saint George/Roum 210, …), so the Bed Capacity Gap criterion is now
+     materially driven by real capacity, not just imputation.
+
+   **Rebuild order** for the hospital dataset:
+   `prepare_hospitals.py` → `scrape_syndicate_hospitals.py` (one-off) →
+   `enrich_hospital_beds.py` → `phase1_ahp_explore.py`.
 
 **Known follow-ups (not yet implemented):**
 
+- **4 famous hospitals still need coordinates** — Psychiatric Hospital of the
+  Cross (907), Saideh (600), Hôtel-Dieu de France (430), Hammoud (300) could not
+  be auto-located (absent/mis-named in OSM, Nominatim, and Wikidata). Paste their
+  lat/lon into `data/hospitals_manual_coords.csv` and re-run
+  `enrich_hospital_beds.py` + the pipeline to include them.
 - Rule-based **hospital proposals** are shipped empty (the grid/clustering logic
   is currently EMS-specific); enabling them means generalizing the grid step to
   accept any supply layer's travel-time field.
