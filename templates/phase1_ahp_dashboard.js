@@ -388,34 +388,61 @@ function toggleCandidatesLayer() {
     setCandidatesLayerVisible(!candidatesVisible);
 }
 
+// Hospital ownership filter: 'all' | 'public' | 'private'
+let hospitalTypeFilter = 'all';
+const HOSP_COLOR = { public: '#2980b9', private: '#c0392b', unknown: '#7f8c8d' };
+
+function _hospVisible(s) {
+    if (hospitalTypeFilter === 'all') return true;
+    if (hospitalTypeFilter === 'public') return s.htype === 'public';
+    // 'private' includes the untagged/unknown (Lebanon is ~88% private)
+    return s.htype !== 'public';
+}
+
 function refreshSupplyLayer() {
     if (!map) return;
     if (supplyLayerGroup) { map.removeLayer(supplyLayerGroup); supplyLayerGroup = null; }
     const isHosp = ACTIVE_DATASET === 'hospitals';
-    // Hospitals are coloured by ownership: public (affordable) vs private/unknown.
-    const hospColor = { public: '#2980b9', private: '#c0392b', unknown: '#7f8c8d' };
-    const markers = (STATIONS || []).map(s => {
-        const color = isHosp ? (hospColor[s.htype] || '#c0392b') : '#2c7fb8';
+    const list = isHosp ? (STATIONS || []).filter(_hospVisible) : (STATIONS || []);
+    const markers = list.map(s => {
+        const color = isHosp ? (HOSP_COLOR[s.htype] || '#c0392b') : '#2c7fb8';
         const m = L.circleMarker([s.lat, s.lon], {
             radius: isHosp && s.htype === 'public' ? 6 : 5,
             color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.9,
         });
-        let html;
         if (isHosp) {
-            const est = s.beds_estimated ? ' <em>(estimated)</em>' : '';
-            const typeLabel = { public: 'Public', private: 'Private', unknown: 'Private/unknown' }[s.htype] || '';
-            html = `<b>${escapeHtml(s.name || 'Unnamed hospital')}</b>`
-                 + (typeLabel ? `<br><b>${typeLabel}</b>` : '')
-                 + `<br>Beds: ${s.beds}${est}`
-                 + (s.operator ? `<br>${escapeHtml(s.operator)}` : '');
+            m.on('click', () => showHospitalDetail(s));
         } else {
-            html = `<b>EMS Station</b>`
-                 + (s.district_name ? `<br>${escapeHtml(s.district_name)}` : '');
+            m.bindPopup(`<b>EMS Station</b>` + (s.district_name ? `<br>${escapeHtml(s.district_name)}` : ''));
         }
-        m.bindPopup(html);
         return m;
     });
     supplyLayerGroup = L.layerGroup(markers).addTo(map);
+}
+
+// ── Hospital click-detail card (bottom-left) ──────────────────────────────────
+function showHospitalDetail(s) {
+    const card = document.getElementById('hospital-detail-card');
+    if (!card) return;
+    const typeText = { public: 'Public', private: 'Private', unknown: 'Private / unknown' }[s.htype] || 'Unknown';
+    const badge = `<span class="hdc-badge" style="background:${HOSP_COLOR[s.htype] || '#7f8c8d'}">${typeText}</span>`;
+    const beds = s.beds_estimated ? `${s.beds} <em>(estimated)</em>` : `${s.beds}`;
+    const rows = [
+        ['Status', badge],
+        ['Bed count', beds],
+        ['Location', `${s.lat.toFixed(4)}, ${s.lon.toFixed(4)}`],
+    ];
+    if (s.operator) rows.push(['Operator', escapeHtml(s.operator)]);
+    card.innerHTML =
+        `<button class="hdc-close" onclick="hideHospitalDetail()" title="Close">&times;</button>`
+        + `<div class="hdc-title">${escapeHtml(s.name || 'Unnamed hospital')}</div>`
+        + rows.map(([k, v]) => `<div class="hdc-row"><span class="hdc-label">${k}</span><span class="hdc-val">${v}</span></div>`).join('');
+    card.style.display = 'block';
+}
+
+function hideHospitalDetail() {
+    const card = document.getElementById('hospital-detail-card');
+    if (card) card.style.display = 'none';
 }
 
 function initCandidatesLayer() {
@@ -984,7 +1011,17 @@ function renderFiltersTab() {
 
     const entries = Object.entries(overlays);
 
-    panel.innerHTML = `
+    // Hospital dataset: ownership filter (public / private / both)
+    const ownershipHtml = ACTIVE_DATASET === 'hospitals' ? `
+        <div class="section-header">Hospital Ownership</div>
+        <div class="filter-desc-note">Show hospitals by who runs them. Public = government / affordable.</div>
+        <div class="ownership-filter">
+            <button class="ownership-btn${hospitalTypeFilter === 'all' ? ' active' : ''}" onclick="setHospitalFilter('all')">Both</button>
+            <button class="ownership-btn${hospitalTypeFilter === 'public' ? ' active' : ''}" onclick="setHospitalFilter('public')">Public only</button>
+            <button class="ownership-btn${hospitalTypeFilter === 'private' ? ' active' : ''}" onclick="setHospitalFilter('private')">Private only</button>
+        </div>` : '';
+
+    panel.innerHTML = ownershipHtml + `
         <div class="section-header">Map Layers</div>
         <div class="filter-desc-note">Toggle layers on or off. Changes are visible on the map immediately.</div>
         <div class="filter-layers-list">
@@ -1066,6 +1103,12 @@ function initMapRefs() {
 }
 
 // ── DATASET SWITCH ────────────────────────────────────────────────────────────
+function setHospitalFilter(t) {
+    hospitalTypeFilter = t;
+    refreshSupplyLayer();
+    if (typeof renderFiltersTab === 'function') renderFiltersTab();  // refresh active button
+}
+
 function setActiveDataset(key) {
     if (!DATASETS[key]) return;
     ACTIVE_DATASET = key;
@@ -1076,6 +1119,10 @@ function setActiveDataset(key) {
     CANDIDATES_BY_PRESET = ds.candidatesByPreset;
     CANDIDATES = (CANDIDATES_BY_PRESET && CANDIDATES_BY_PRESET.balanced) || [];
     DEFAULT_COVERAGE_THRESHOLD = ds.threshold;
+
+    // Reset hospital-specific UI state on every switch.
+    hospitalTypeFilter = 'all';
+    if (typeof hideHospitalDetail === 'function') hideHospitalDetail();
 
     // Re-render map + panels for the newly active dataset.
     if (typeof refreshSupplyLayer === 'function') refreshSupplyLayer(); // defined in a later task
