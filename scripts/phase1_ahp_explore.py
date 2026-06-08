@@ -1512,24 +1512,7 @@ panel_html = f"""            <div class="panel-header">
                 <!-- ── ANALYSIS TAB ── -->
                 <div class="tab-panel" id="tab-analysis">
 
-                    <div class="summary-grid" style="margin-bottom:14px;">
-                        <div class="stat-card">
-                            <div class="label">EMS Stations</div>
-                            <div class="value">{total_stations}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="label">Population</div>
-                            <div class="value">{total_pop:,.0f}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="label">Uncovered Districts</div>
-                            <div class="value" style="color:#e74c3c">{uncovered_districts_count} / {total_districts_count}</div>
-                        </div>
-                        <div class="stat-card">
-                            <div class="label">Pop. Outside 10-Min</div>
-                            <div class="value" style="color:#f39c12">{uncovered_population_percent:.1f}%</div>
-                        </div>
-                    </div>
+                    <div class="summary-grid" id="ahp-summary-cards" style="margin-bottom:14px;"><!-- filled per-dataset by renderAhpSummary() --></div>
 
                     <div class="analysis-controls">
                         <input type="text" id="district-search" class="district-search" placeholder="Search district…" style="flex:1;margin-bottom:0;">
@@ -1599,6 +1582,22 @@ all_presets_json = json.dumps(candidates_by_preset_json)
 # CANDIDATES defaults to the balanced preset for backward compat
 balanced_json = json.dumps(candidates_by_preset_json.get('balanced', []))
 
+# Per-dataset summary cards (shown at the top of the Analysis tab, swap on toggle)
+ems_summary = [
+    {'label': 'EMS Stations',        'value': f'{total_stations}',                                  'color': '#4a9eff'},
+    {'label': 'Population',          'value': f'{total_pop:,.0f}',                                   'color': '#4a9eff'},
+    {'label': 'Uncovered Districts', 'value': f'{uncovered_districts_count} / {total_districts_count}', 'color': '#e74c3c'},
+    {'label': 'Pop. Outside 10-Min', 'value': f'{uncovered_population_percent:.1f}%',                'color': '#f39c12'},
+]
+_hosp_need_n = int((hosp_districts['need_class'] == 'NEED').sum())
+_hosp_over_n = int((hosp_districts['need_class'] == 'OVERSUPPLIED').sum())
+hospital_summary = [
+    {'label': 'Hospitals',              'value': f'{len(hospitals_supply)}',                 'color': '#4a9eff'},
+    {'label': 'Population',             'value': f'{total_pop:,.0f}',                         'color': '#4a9eff'},
+    {'label': 'Need New Capacity',      'value': f'{_hosp_need_n} / {len(hosp_districts)}',   'color': '#e74c3c'},
+    {'label': 'Benchmark (beds/1k)',    'value': f'{BED_BENCHMARK}',                          'color': '#27ae60'},
+]
+
 # Build JS data block (Python-computed constants injected into JS scope)
 datasets_obj = {
     'ems': {
@@ -1610,6 +1609,7 @@ datasets_obj = {
         'districts': districts_data,            # existing EMS districts list
         'supply': stations_data,                # existing EMS supply list
         'candidatesByPreset': candidates_by_preset_json,
+        'summary': ems_summary,
     },
     'hospitals': {
         'label': 'Hospitals',
@@ -1621,6 +1621,7 @@ datasets_obj = {
         'supply': hospitals_supply,
         'candidatesByPreset': hospital_candidates_by_preset,
         'bedBenchmark': BED_BENCHMARK,
+        'summary': hospital_summary,
     },
 }
 js_data = f"""        const DATASETS = {json.dumps(datasets_obj)};

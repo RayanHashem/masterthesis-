@@ -54,24 +54,16 @@ function getFilteredDistricts() {
     });
 }
 
-// ── AHP SUMMARY CARDS ─────────────────────────────────────────────────────────
-function renderAhpSummary(filtered) {
-    const counts = { High: 0, Medium: 0, Low: 0 };
-    filtered.forEach(d => { if (counts[d.ahp_priority] !== undefined) counts[d.ahp_priority]++; });
-    const cards = [
-        { label: 'High Priority',   count: counts.High,   color: '#e74c3c' },
-        { label: 'Medium Priority', count: counts.Medium, color: '#f39c12' },
-        { label: 'Low Priority',    count: counts.Low,    color: '#27ae60' },
-    ];
-    // Hospital dataset: add an absolute "needs new capacity" count.
-    if (ACTIVE_DATASET === 'hospitals') {
-        const needN = filtered.filter(d => d.need_class === 'NEED').length;
-        cards.push({ label: 'Need Capacity', count: needN, color: '#c0392b' });
-    }
-    document.getElementById('ahp-summary-cards').innerHTML = cards.map(c =>
+// ── SUMMARY CARDS (per-dataset, swap on toggle) ───────────────────────────────
+function renderAhpSummary() {
+    const el = document.getElementById('ahp-summary-cards');
+    if (!el) return;
+    const ds = DATASETS[ACTIVE_DATASET] || {};
+    const cards = ds.summary || [];
+    el.innerHTML = cards.map(c =>
         `<div class="stat-card" style="border-color:${c.color}">
             <div class="label">${c.label}</div>
-            <div class="value" style="color:${c.color}">${c.count}</div>
+            <div class="value" style="color:${c.color}">${c.value}</div>
         </div>`
     ).join('');
 }
@@ -859,6 +851,7 @@ function applyFilters() {
     const filtered      = getFilteredDistricts();
     const filteredNames = new Set(filtered.map(d => d.district_name));
 
+    renderAhpSummary();
     renderAhpRanking(filtered);
     renderCandidates();
 
