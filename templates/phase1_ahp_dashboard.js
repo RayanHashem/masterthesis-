@@ -426,13 +426,20 @@ function _hospVisible(s) {
 function refreshSupplyLayer() {
     if (!map) return;
     if (supplyLayerGroup) { map.removeLayer(supplyLayerGroup); supplyLayerGroup = null; }
+    // Dedicated high-z pane so hospital markers sit ABOVE the heatmap & choropleth.
+    if (!map.getPane('supplyPane')) {
+        map.createPane('supplyPane');
+        map.getPane('supplyPane').style.zIndex = 650;
+    }
     const isHosp = ACTIVE_DATASET === 'hospitals';
     const list = isHosp ? (STATIONS || []).filter(_hospVisible) : (STATIONS || []);
     const markers = list.map(s => {
+        const isPub = isHosp && s.htype === 'public';
         const color = isHosp ? (HOSP_COLOR[s.htype] || '#c0392b') : '#2c7fb8';
         const m = L.circleMarker([s.lat, s.lon], {
-            radius: isHosp && s.htype === 'public' ? 6 : 5,
-            color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.9,
+            pane: 'supplyPane',
+            radius: isPub ? 7 : 5,
+            color: '#ffffff', weight: isPub ? 2.5 : 1.5, fillColor: color, fillOpacity: 1,
         });
         if (isHosp) {
             m.on('click', () => showHospitalDetail(s));
