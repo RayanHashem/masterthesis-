@@ -648,6 +648,23 @@ def _need_class(row):
 
 hosp_districts['need_class'] = hosp_districts.apply(_need_class, axis=1)
 _need_counts = hosp_districts['need_class'].value_counts().to_dict()
+
+# Per-district PUBLIC hospital count (affordability/equity: 88% of hospitals are
+# private; districts with no public hospital force reliance on unaffordable care).
+_pub_gdf = hospitals_gdf[hospitals_gdf.get('hospital_type', '') == 'public'].copy()
+if len(_pub_gdf) > 0:
+    if _pub_gdf.crs != hosp_districts.crs:
+        _pub_gdf = _pub_gdf.to_crs(hosp_districts.crs)
+    _pub_join = gpd.sjoin(_pub_gdf, hosp_districts[['NAME_2', 'geometry']],
+                          how='left', predicate='within')
+    _pub_by_name = _pub_join.groupby('NAME_2').size().to_dict()
+else:
+    _pub_by_name = {}
+hosp_districts['public_hospitals'] = hosp_districts['NAME_2'].map(
+    lambda n: int(_pub_by_name.get(n, 0)))
+_no_public_n = int((hosp_districts['public_hospitals'] == 0).sum())
+_public_total = int((hospitals_gdf.get('hospital_type', '') == 'public').sum())
+print(f"  ✓ Public hospitals: {_public_total} | districts with NO public hospital: {_no_public_n}")
 print(f"  ✓ Bed benchmark (national avg): {BED_BENCHMARK} beds/1,000")
 print(f"  ✓ NEED/ADEQUATE/OVERSUPPLIED: {_need_counts}")
 
@@ -1523,6 +1540,7 @@ def build_hospital_districts_data(d):
             'norm_bed_gap': round(float(row.get('norm_bed_gap', 0)), 4),
             'beds_per_1000': round(float(row.get('beds_per_1000', 0)), 2),
             'need_class': str(row.get('need_class', 'ADEQUATE')),
+            'public_hospitals': int(row.get('public_hospitals', 0)),
         })
     return out
 
@@ -1542,6 +1560,7 @@ for _, r in hospitals_df.iterrows():
         'name': nm if nm else 'Unnamed hospital',
         'beds': int(r['beds']), 'beds_estimated': bool(r['beds_estimated']),
         'operator': _clean_str(r.get('operator', '')),
+        'htype': _clean_str(r.get('hospital_type', '')) or 'unknown',
     })
 
 # Hospital proposals are deferred to a follow-up task (the grid/clustering
@@ -1672,10 +1691,10 @@ ems_summary = [
 _hosp_need_n = int((hosp_districts['need_class'] == 'NEED').sum())
 _hosp_over_n = int((hosp_districts['need_class'] == 'OVERSUPPLIED').sum())
 hospital_summary = [
-    {'label': 'Hospitals',              'value': f'{len(hospitals_supply)}',                 'color': '#4a9eff'},
-    {'label': 'Population',             'value': f'{total_pop:,.0f}',                         'color': '#4a9eff'},
+    {'label': 'Hospitals (total)',      'value': f'{len(hospitals_supply)}',                 'color': '#4a9eff'},
+    {'label': 'Public Hospitals',       'value': f'{_public_total}',                          'color': '#2980b9'},
     {'label': 'Need New Capacity',      'value': f'{_hosp_need_n} / {len(hosp_districts)}',   'color': '#e74c3c'},
-    {'label': 'Benchmark (beds/1k)',    'value': f'{BED_BENCHMARK}',                          'color': '#27ae60'},
+    {'label': 'No Public Hospital',     'value': f'{_no_public_n} / {len(hosp_districts)}',   'color': '#e67e22'},
 ]
 
 # Build JS data block (Python-computed constants injected into JS scope)

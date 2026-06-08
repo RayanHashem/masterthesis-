@@ -392,15 +392,20 @@ function refreshSupplyLayer() {
     if (!map) return;
     if (supplyLayerGroup) { map.removeLayer(supplyLayerGroup); supplyLayerGroup = null; }
     const isHosp = ACTIVE_DATASET === 'hospitals';
-    const color = isHosp ? '#c0392b' : '#2c7fb8';
+    // Hospitals are coloured by ownership: public (affordable) vs private/unknown.
+    const hospColor = { public: '#2980b9', private: '#c0392b', unknown: '#7f8c8d' };
     const markers = (STATIONS || []).map(s => {
+        const color = isHosp ? (hospColor[s.htype] || '#c0392b') : '#2c7fb8';
         const m = L.circleMarker([s.lat, s.lon], {
-            radius: 5, color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.9,
+            radius: isHosp && s.htype === 'public' ? 6 : 5,
+            color: '#ffffff', weight: 1, fillColor: color, fillOpacity: 0.9,
         });
         let html;
         if (isHosp) {
             const est = s.beds_estimated ? ' <em>(estimated)</em>' : '';
+            const typeLabel = { public: 'Public', private: 'Private', unknown: 'Private/unknown' }[s.htype] || '';
             html = `<b>${escapeHtml(s.name || 'Unnamed hospital')}</b>`
+                 + (typeLabel ? `<br><b>${typeLabel}</b>` : '')
                  + `<br>Beds: ${s.beds}${est}`
                  + (s.operator ? `<br>${escapeHtml(s.operator)}` : '');
         } else {

@@ -160,9 +160,32 @@ def main():
             r["beds_estimated"] = True
             r["beds_source"] = "median-estimate"
 
+    # ── Public / private classification ──────────────────────────────────────
+    # Lebanese public hospitals are almost all named "<Place> Governmental
+    # Hospital" / "...الحكومي"; OSM also carries an operator_type tag. We treat a
+    # Syndicate-of-Hospitals match as private (that body covers private hospitals).
+    n_pub = n_priv = n_unk = 0
+    for r in rows:
+        text = f"{r.get('name','')} {r.get('operator','')}".lower()
+        otype = (r.get("operator_type") or "").lower()
+        bsrc = r.get("beds_source", "")
+        is_public = (
+            any(k in text for k in ("government", "حكوم", "ministry", "moph"))
+            or otype in ("public", "government", "military")
+        )
+        if is_public:
+            r["hospital_type"] = "public"
+            n_pub += 1
+        elif otype in ("private", "business") or bsrc.startswith("syndicate"):
+            r["hospital_type"] = "private"
+            n_priv += 1
+        else:
+            r["hospital_type"] = "unknown"
+            n_unk += 1
+
     # Write
     fields = ["name", "lat", "lon", "beds", "beds_estimated", "beds_source",
-              "operator", "operator_type", "osm_id", "geom_type"]
+              "hospital_type", "operator", "operator_type", "osm_id", "geom_type"]
     with open(OSM_CSV, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
@@ -176,6 +199,7 @@ def main():
     print(f"  manual-coords added: {n_manual}")
     print(f"  REAL bed counts now: {real} / {len(rows)}  (was 3)")
     print(f"  median used for the remaining {len(rows) - real} estimates: {median_beds}")
+    print(f"  type — public: {n_pub} | private: {n_priv} | unknown: {n_unk}")
     print(f"Wrote {OSM_CSV}")
 
 
