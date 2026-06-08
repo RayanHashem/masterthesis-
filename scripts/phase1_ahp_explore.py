@@ -732,6 +732,16 @@ if best_time_s is not None and len(grid_cells_gdf) > 0:
         grid_cells_gdf['min_travel_time_min'] = grid_min_travel_min
         grid_cells_gdf['covered_10min'] = grid_covered
 
+        # Phase 2.5: travel time from each grid cell to the nearest HOSPITAL
+        # (reuse the same snapped nodes; just look up the hospital Dijkstra result)
+        _hosp_best = hosp_result.get('best_time_s')
+        if _hosp_best is not None:
+            _hosp_tt_s = [_hosp_best.get(n, _INF) for n in nearest_nodes]
+            grid_cells_gdf['hosp_travel_min'] = [
+                round(t / 60.0, 1) if t != _INF else np.nan for t in _hosp_tt_s]
+        else:
+            grid_cells_gdf['hosp_travel_min'] = np.nan
+
         total_cells   = len(grid_cells_gdf)
         covered_cells = int(sum(grid_covered))
         uncovered_cells = total_cells - covered_cells
@@ -813,19 +823,20 @@ if len(grid_cells_gdf) > 0 and 'min_travel_time_min' in grid_cells_gdf.columns:
         COVERAGE_MINUTES    = 10     # must be reachable within this (covered_10min)
         CLUSTER_EPS_M       = 3000   # group qualifying cells within 3 km → 1 station
 
-        def _find_candidates_by_rule(gdf, districts):
-            """Official rule: a station is proposed wherever a high-density grid
-            cell (>= MIN_DENSITY_PER_KM2 residents/km²) is NOT reachable by an
-            existing station within COVERAGE_MINUTES minutes. Qualifying cells
-            are clustered (one station per cluster) and the station is placed at
-            the population-weighted centroid. The AHP score on each grid cell
+        def _find_candidates_by_rule(gdf, districts, qual_mask=None):
+            """Propose a facility at the population-weighted centroid of each
+            cluster of *qualifying* grid cells. The qualifying gate is passed in
+            via `qual_mask`; if omitted it defaults to the EMS rule (dense AND
+            not reachable within COVERAGE_MINUTES). The AHP score on each cell
             (already computed for the active preset) is attached only to RANK the
-            proposals — it never decides which cells qualify."""
+            proposals."""
             from sklearn.cluster import DBSCAN
 
-            # 1) Rule gate — weight-independent: dense AND not reachable in 10 min
-            _qual = gdf[(gdf['pop_density'] >= MIN_DENSITY_PER_KM2) &
-                        (gdf['covered_10min'] == False)].copy()
+            # 1) Qualifying gate (EMS default: dense AND not reachable in 10 min)
+            if qual_mask is None:
+                qual_mask = ((gdf['pop_density'] >= MIN_DENSITY_PER_KM2) &
+                             (gdf['covered_10min'] == False))
+            _qual = gdf[qual_mask].copy()
             if len(_qual) == 0:
                 return []
 
@@ -976,6 +987,68 @@ if len(grid_cells_gdf) > 0 and 'min_travel_time_min' in grid_cells_gdf.columns:
 else:
     print("  ⚠ Skipped (grid not available or travel times missing)")
     candidates_by_preset = {'balanced': [], 'access': [], 'population': []}
+
+# ============================================================================
+# 5i. PHASE 2.5 — HOSPITAL PROPOSALS (where to add hospital capacity)
+# A populated grid cell qualifies if it is UNDER-SERVED by hospitals (more than
+# HOSP_GAP_MIN minutes from the nearest hospital) AND scores in the top tier for
+# the active preset's weights — so the proposed locations shift between presets.
+# Qualifying cells are clustered (one proposal each) at the pop-weighted centroid.
+# ============================================================================
+print("5i. COMPUTING HOSPITAL PROPOSALS")
+print("-" * 80)
+
+HOSP_GAP_MIN = 15      # 'under-served': a cell more than this many minutes from a hospital
+HOSP_MIN_SERVED_POP = 5000  # a proposal must serve at least this many people (no hamlet hospitals)
+hospital_candidates_raw = {'balanced': [], 'access': [], 'population': []}
+_HOSP_PRESETS = {
+    'balanced':   (0.35, 0.45, 0.20),
+    'access':     (0.60, 0.25, 0.15),
+    'population': (0.20, 0.60, 0.20),
+}
+try:
+    if (len(grid_cells_gdf) > 0 and 'hosp_travel_min' in grid_cells_gdf.columns
+            and grid_cells_gdf['hosp_travel_min'].notna().any()):
+        hg = grid_cells_gdf.copy()
+        hg['pop_density'] = hg['population']  # 1 km² cells
+        hg['h_capped'] = hg['hosp_travel_min'].clip(upper=45).fillna(45)
+        hg['h_exposed'] = hg.apply(
+            lambda r: r['population'] if (pd.isna(r['hosp_travel_min'])
+                                          or r['hosp_travel_min'] > HOSPITAL_THRESHOLD_MIN) else 0.0,
+            axis=1)
+
+        def _mmh(s):
+            mn, mx = s.min(), s.max()
+            return (s - mn) / (mx - mn) if mx > mn else pd.Series(0.0, index=s.index)
+
+        hg['norm_access_gap']  = _mmh(hg['h_capped'])
+        hg['norm_pop_density'] = _mmh(hg['pop_density'])
+        hg['norm_exposed_pop'] = _mmh(hg['h_exposed'])
+        hg['_underserved'] = hg['hosp_travel_min'] >= HOSP_GAP_MIN
+
+        for _pn, (_w1, _w2, _w3) in _HOSP_PRESETS.items():
+            _sc = (_w1 * hg['norm_access_gap'] + _w2 * hg['norm_pop_density']
+                   + _w3 * hg['norm_exposed_pop'])
+            hg['ahp_score'] = _sc.round(3)
+            hg['min_travel_time_min'] = hg['hosp_travel_min']
+            _q80 = _sc.quantile(0.80)
+            _mask = hg['_underserved'] & (_sc >= _q80)
+            _c = _find_candidates_by_rule(hg, districts_agg, qual_mask=_mask)
+            # Keep only proposals serving a meaningful population, then re-rank.
+            _c = [x for x in _c if x.get('cluster_population_sum', 0) >= HOSP_MIN_SERVED_POP]
+            for _i, _x in enumerate(_c, 1):
+                _x['candidate_id'] = _i
+            hospital_candidates_raw[_pn] = _c
+            print(f"  [{_pn}] → {len(_c)} hospital proposals "
+                  f"(gate: >{HOSP_GAP_MIN} min from a hospital, top-tier score, "
+                  f"serving ≥{HOSP_MIN_SERVED_POP:,} people)")
+    else:
+        print("  ⚠ Skipped (grid or hospital travel times unavailable)")
+except Exception as _e:
+    print(f"  ✗ Error computing hospital proposals: {_e}")
+    import traceback
+    traceback.print_exc()
+    hospital_candidates_raw = {'balanced': [], 'access': [], 'population': []}
 
 # ============================================================================
 # 6. CREATE FOLIUM MAP WITH COLOR-CODED DISTRICTS
@@ -1473,7 +1546,8 @@ for _, r in hospitals_df.iterrows():
 
 # Hospital proposals are deferred to a follow-up task (the grid/clustering
 # logic is EMS-specific); ship empty presets for now.
-hospital_candidates_by_preset = {'balanced': [], 'access': [], 'population': []}
+# hospital_candidates_by_preset is built from hospital_candidates_raw in section 8,
+# once _build_candidates_list is defined (same JS format as the EMS proposals).
 
 # Lebanon bounds for Reset Map View
 LEBANON_BOUNDS = [[33.05, 35.09], [34.69, 36.62]]
@@ -1577,6 +1651,12 @@ def _build_candidates_list(records):
 candidates_by_preset_json = {}
 for _pname, _precs in candidates_by_preset.items():
     candidates_by_preset_json[_pname] = _build_candidates_list(_precs)
+
+# Hospital proposals → same JS format as EMS, per preset
+hospital_candidates_by_preset = {
+    _pname: _build_candidates_list(_precs)
+    for _pname, _precs in hospital_candidates_raw.items()
+}
 
 all_presets_json = json.dumps(candidates_by_preset_json)
 # CANDIDATES defaults to the balanced preset for backward compat
