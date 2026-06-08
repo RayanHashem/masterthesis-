@@ -999,6 +999,33 @@ const _LAYER_META = {
     'Suggested New EMS Stations':    { color: '#00cec9', desc: 'Proposed new station locations' },
 };
 
+// Folium overlays baked from EMS data — hide them (list + map) for hospitals.
+const EMS_ONLY_LAYERS = new Set([
+    '10-Min Coverage (Road Time)',
+    'AHP Priority (District Level)',
+    'Grid AHP Priority (High+Medium)',
+    'Grid AHP Priority (Low)',
+    'Suggested New EMS Stations',
+]);
+let _layerDefaults = null;  // captured once: layer name -> on-by-default?
+
+/** Hide EMS-only Folium layers when the hospital dataset is active. */
+function applyDatasetLayerVisibility() {
+    const overlays = _getFoliumOverlays();
+    if (!overlays || !map) return;
+    if (_layerDefaults === null) {
+        _layerDefaults = {};
+        Object.entries(overlays).forEach(([n, l]) => { _layerDefaults[n] = map.hasLayer(l); });
+    }
+    const isHosp = ACTIVE_DATASET === 'hospitals';
+    Object.entries(overlays).forEach(([n, l]) => {
+        if (!EMS_ONLY_LAYERS.has(n)) return;
+        const show = !isHosp && _layerDefaults[n];
+        if (show && !map.hasLayer(l)) map.addLayer(l);
+        else if (!show && map.hasLayer(l)) map.removeLayer(l);
+    });
+}
+
 function renderFiltersTab() {
     const panel = document.getElementById('tab-filters');
     if (!panel || !map) return;
@@ -1009,7 +1036,9 @@ function renderFiltersTab() {
         return;
     }
 
-    const entries = Object.entries(overlays);
+    // Hide EMS-specific layers from the list when viewing hospitals.
+    const entries = Object.entries(overlays).filter(
+        ([name]) => ACTIVE_DATASET !== 'hospitals' || !EMS_ONLY_LAYERS.has(name));
 
     // Hospital dataset: ownership filter (public / private / both)
     const ownershipHtml = ACTIVE_DATASET === 'hospitals' ? `
@@ -1126,6 +1155,7 @@ function setActiveDataset(key) {
 
     // Re-render map + panels for the newly active dataset.
     if (typeof refreshSupplyLayer === 'function') refreshSupplyLayer(); // defined in a later task
+    if (typeof applyDatasetLayerVisibility === 'function') applyDatasetLayerVisibility();
     if (typeof initCandidatesLayer === 'function') initCandidatesLayer();
     if (typeof initModelNormScores === 'function') initModelNormScores();
     if (typeof recomputeAhpScores === 'function') recomputeAhpScores();
@@ -1185,6 +1215,7 @@ function initFilters() {
 
     initMapRefs();
     refreshSupplyLayer();
+    applyDatasetLayerVisibility();
     initModelNormScores();
     renderModelTab();
     renderFiltersTab();
