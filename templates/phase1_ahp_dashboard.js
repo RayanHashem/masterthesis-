@@ -683,6 +683,7 @@ function renderModelTab() {
     if (!panel) return;
     const hasTT      = DISTRICTS.length > 0 && DISTRICTS[0].min_travel_time_min !== null && DISTRICTS[0].min_travel_time_min !== undefined;
     const defaultThr = typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 10;
+    const supplyWord = ACTIVE_DATASET === 'hospitals' ? 'hospital' : 'station';
 
     // ── Results section (populated by renderModelResults after recompute) ──
     let html = `<div class="model-results-section" id="model-results-section"></div>
@@ -690,7 +691,7 @@ function renderModelTab() {
 
         <div class="section-header" style="margin-top:10px;">Coverage Threshold</div>
         <div class="${hasTT ? '' : 'model-disabled'}">
-            <div class="model-desc">Districts are "exposed" if travel time to nearest station exceeds this value.</div>
+            <div class="model-desc">Districts are "exposed" if travel time to nearest ${supplyWord} exceeds this value.</div>
             ${!hasTT ? '<div class="model-note">&#9888; Re-run the Python script to enable live threshold control.</div>' : ''}
             <div class="model-slider-row">
                 <input type="range" id="coverage-threshold" class="filter-slider"
@@ -762,7 +763,10 @@ const WEIGHT_PRESETS = {
 };
 
 function applyPreset(presetName) {
-    const preset = WEIGHT_PRESETS[presetName];
+    // Presets are per-dataset (the hospital model has a 4th 'bed_gap' criterion),
+    // so read them from the active dataset; fall back to the EMS defaults.
+    const dsPresets = (DATASETS[ACTIVE_DATASET] && DATASETS[ACTIVE_DATASET].presets) || WEIGHT_PRESETS;
+    const preset = dsPresets[presetName];
     if (!preset) return;
 
     // Update hidden slider values so recomputeAhpScores reads them

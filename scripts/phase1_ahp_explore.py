@@ -1610,6 +1610,11 @@ datasets_obj = {
         'supply': stations_data,                # existing EMS supply list
         'candidatesByPreset': candidates_by_preset_json,
         'summary': ems_summary,
+        'presets': {
+            'balanced':   {'access_gap': 0.50, 'pop_density': 0.30, 'exposed_pop': 0.20},
+            'access':     {'access_gap': 0.70, 'pop_density': 0.15, 'exposed_pop': 0.15},
+            'population': {'access_gap': 0.20, 'pop_density': 0.50, 'exposed_pop': 0.30},
+        },
     },
     'hospitals': {
         'label': 'Hospitals',
@@ -1622,6 +1627,11 @@ datasets_obj = {
         'candidatesByPreset': hospital_candidates_by_preset,
         'bedBenchmark': BED_BENCHMARK,
         'summary': hospital_summary,
+        'presets': {
+            'balanced':   {'access_gap': 0.30, 'pop_density': 0.30, 'exposed_pop': 0.25, 'bed_gap': 0.15},
+            'access':     {'access_gap': 0.50, 'pop_density': 0.20, 'exposed_pop': 0.20, 'bed_gap': 0.10},
+            'population': {'access_gap': 0.15, 'pop_density': 0.45, 'exposed_pop': 0.25, 'bed_gap': 0.15},
+        },
     },
 }
 js_data = f"""        const DATASETS = {json.dumps(datasets_obj)};
