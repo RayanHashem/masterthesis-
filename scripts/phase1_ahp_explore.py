@@ -665,6 +665,28 @@ hosp_districts['public_hospitals'] = hosp_districts['NAME_2'].map(
 _no_public_n = int((hosp_districts['public_hospitals'] == 0).sum())
 _public_total = int((hospitals_gdf.get('hospital_type', '') == 'public').sum())
 print(f"  ✓ Public hospitals: {_public_total} | districts with NO public hospital: {_no_public_n}")
+
+# Total hospitals per district (for the equity profile / private = total - public)
+_all_join = gpd.sjoin(hospitals_gdf.to_crs(hosp_districts.crs),
+                      hosp_districts[['NAME_2', 'geometry']], how='left', predicate='within')
+_all_by_name = _all_join.groupby('NAME_2').size().to_dict()
+hosp_districts['total_hospitals'] = hosp_districts['NAME_2'].map(lambda n: int(_all_by_name.get(n, 0)))
+
+# ── 3-lens equity diagnostic: capacity / access / affordability ──────────────
+# Capacity verdict = need_class (already computed). Access from travel time to
+# the nearest hospital. Affordability = does the district have a public hospital.
+def _access_class(tt):
+    if tt is None or pd.isna(tt):
+        return 'Poor'
+    if tt <= 15:
+        return 'Good'
+    if tt <= 25:
+        return 'Fair'
+    return 'Poor'
+
+hosp_districts['access_class'] = hosp_districts['min_travel_time_min'].apply(_access_class)
+hosp_districts['afford_class'] = hosp_districts['public_hospitals'].apply(
+    lambda n: 'public' if n >= 1 else 'none')
 print(f"  ✓ Bed benchmark (national avg): {BED_BENCHMARK} beds/1,000")
 print(f"  ✓ NEED/ADEQUATE/OVERSUPPLIED: {_need_counts}")
 
@@ -1541,6 +1563,9 @@ def build_hospital_districts_data(d):
             'beds_per_1000': round(float(row.get('beds_per_1000', 0)), 2),
             'need_class': str(row.get('need_class', 'ADEQUATE')),
             'public_hospitals': int(row.get('public_hospitals', 0)),
+            'total_hospitals': int(row.get('total_hospitals', 0)),
+            'access_class': str(row.get('access_class', 'Good')),
+            'afford_class': str(row.get('afford_class', 'public')),
         })
     return out
 

@@ -82,44 +82,68 @@ function renderAhpRanking(filtered) {
         return;
     }
 
-    const priorityColor = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
-    const priorityClass = { High: 'ahp-priority-high', Medium: 'ahp-priority-medium', Low: 'ahp-priority-low' };
-
-    // Hospital dataset adds an absolute capacity verdict vs the national benchmark.
     const isHosp = ACTIVE_DATASET === 'hospitals';
-    const needColor = { NEED: '#e74c3c', ADEQUATE: '#7f8c8d', OVERSUPPLIED: '#27ae60' };
-    const needText  = { NEED: 'NEED', ADEQUATE: 'Adequate', OVERSUPPLIED: 'No need' };
-    const needCell = d => {
-        const nc = d.need_class || 'ADEQUATE';
-        return `<td><span class="need-badge" style="background:${needColor[nc] || '#7f8c8d'}">`
-             + `${needText[nc] || nc}</span></td>`;
-    };
+    let html;
 
-    let html = `<table class="ahp-ranking-table"><thead><tr>
-        <th>#</th><th>District</th><th>Priority</th>${isHosp ? '<th>Capacity</th>' : ''}<th>Score</th>
-    </tr></thead><tbody>`;
-
-    rows.forEach((d, i) => {
-        const cls      = priorityClass[d.ahp_priority] || 'ahp-priority-low';
-        const barColor = priorityColor[d.ahp_priority] || '#27ae60';
-        const pct      = Math.round((d.ahp_score / maxScore) * 100);
-        const safeName = d.district_name.replace(/"/g, '&quot;');
-        html += `<tr data-district-name="${safeName}">
-            <td style="color:#666">${i + 1}</td>
-            <td>${d.district_name}</td>
-            <td class="${cls}">${d.ahp_priority}</td>
-            ${isHosp ? needCell(d) : ''}
-            <td class="score-bar-cell">
-                <div class="score-bar-wrap">
-                    <div class="score-bar-bg">
-                        <div class="score-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+    if (isHosp) {
+        // ── 3-lens equity diagnostic: Capacity · Access · Affordability ──
+        const cap = d => {
+            const c = { NEED: ['NEED', '#e74c3c'], ADEQUATE: ['Adequate', '#7f8c8d'], OVERSUPPLIED: ['No need', '#27ae60'] }[d.need_class || 'ADEQUATE'];
+            return `<span class="need-badge" style="background:${c[1]}">${c[0]}</span>`;
+        };
+        const acc = d => {
+            const c = { Good: ['Good', '#27ae60'], Fair: ['Fair', '#f39c12'], Poor: ['Poor', '#e74c3c'] }[d.access_class || 'Good'];
+            return `<span class="need-badge" style="background:${c[1]}" title="${d.min_travel_time_min != null ? d.min_travel_time_min + ' min to nearest hospital' : ''}">${c[0]}</span>`;
+        };
+        const aff = d => (d.afford_class === 'none')
+            ? `<span class="need-badge" style="background:#e74c3c">No public</span>`
+            : `<span class="need-badge" style="background:#27ae60">Public ✓</span>`;
+        // Worst-served first: 1 point per failing lens.
+        const score = d => (d.need_class === 'NEED' ? 2 : 0)
+            + (d.access_class === 'Poor' ? 2 : d.access_class === 'Fair' ? 1 : 0)
+            + (d.afford_class === 'none' ? 2 : 0);
+        const hrows = [...filtered].sort((a, b) => score(b) - score(a) || a.beds_per_1000 - b.beds_per_1000);
+        const shown = limitVal === 'all' ? hrows : hrows.slice(0, parseInt(limitVal, 10));
+        html = `<div class="filter-desc-note">Each district graded on three lenses — worst-served first. Click a row for its full profile.</div>
+            <table class="ahp-ranking-table"><thead><tr>
+            <th>#</th><th>District</th><th>Capacity</th><th>Access</th><th>Affordability</th>
+        </tr></thead><tbody>`;
+        shown.forEach((d, i) => {
+            const safeName = d.district_name.replace(/"/g, '&quot;');
+            html += `<tr data-district-name="${safeName}">
+                <td style="color:#666">${i + 1}</td>
+                <td>${d.district_name}</td>
+                <td>${cap(d)}</td><td>${acc(d)}</td><td>${aff(d)}</td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+    } else {
+        const priorityColor = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
+        const priorityClass = { High: 'ahp-priority-high', Medium: 'ahp-priority-medium', Low: 'ahp-priority-low' };
+        html = `<table class="ahp-ranking-table"><thead><tr>
+            <th>#</th><th>District</th><th>Priority</th><th>Score</th>
+        </tr></thead><tbody>`;
+        rows.forEach((d, i) => {
+            const cls      = priorityClass[d.ahp_priority] || 'ahp-priority-low';
+            const barColor = priorityColor[d.ahp_priority] || '#27ae60';
+            const pct      = Math.round((d.ahp_score / maxScore) * 100);
+            const safeName = d.district_name.replace(/"/g, '&quot;');
+            html += `<tr data-district-name="${safeName}">
+                <td style="color:#666">${i + 1}</td>
+                <td>${d.district_name}</td>
+                <td class="${cls}">${d.ahp_priority}</td>
+                <td class="score-bar-cell">
+                    <div class="score-bar-wrap">
+                        <div class="score-bar-bg">
+                            <div class="score-bar-fill" style="width:${pct}%;background:${barColor}"></div>
+                        </div>
+                        <span class="score-bar-val">${d.ahp_score.toFixed(3)}</span>
                     </div>
-                    <span class="score-bar-val">${d.ahp_score.toFixed(3)}</span>
-                </div>
-            </td>
-        </tr>`;
-    });
-    html += '</tbody></table>';
+                </td>
+            </tr>`;
+        });
+        html += '</tbody></table>';
+    }
     document.getElementById('ahp-ranking-table').innerHTML = html;
 
     document.querySelectorAll('#ahp-ranking-table tr[data-district-name]').forEach(row => {
@@ -487,14 +511,29 @@ function showSelectedDistrictCard(districtName) {
     const card = document.getElementById('selected-district-card');
     if (!d || !card) return;
 
-    const priorityColor = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
-    const col = priorityColor[d.ahp_priority] || '#27ae60';
-
-    card.innerHTML = `
-        <div class="sdc-title">
-            <span>${d.district_name} <small style="color:#aaa;font-weight:400">${d.governorate}</small></span>
-            <span class="sdc-close" onclick="hideSelectedDistrictCard()">&times;</span>
-        </div>
+    let body;
+    if (ACTIVE_DATASET === 'hospitals') {
+        // Hospital equity profile: capacity \u00b7 access \u00b7 affordability
+        const capC = { NEED: ['NEED', '#e74c3c'], ADEQUATE: ['Adequate', '#7f8c8d'], OVERSUPPLIED: ['No need', '#27ae60'] }[d.need_class || 'ADEQUATE'];
+        const accC = { Good: ['Good', '#27ae60'], Fair: ['Fair', '#f39c12'], Poor: ['Poor', '#e74c3c'] }[d.access_class || 'Good'];
+        const affOk = d.afford_class !== 'none';
+        const tt = d.min_travel_time_min != null ? d.min_travel_time_min + ' min' : '\u2014';
+        const priv = (d.total_hospitals || 0) - (d.public_hospitals || 0);
+        body = `
+        <div class="sdc-grid">
+            <div><div class="sdc-label">Capacity</div><div class="sdc-val" style="color:${capC[1]}">${capC[0]}</div></div>
+            <div><div class="sdc-label">Access</div><div class="sdc-val" style="color:${accC[1]}">${accC[0]}</div></div>
+            <div><div class="sdc-label">Affordability</div><div class="sdc-val" style="color:${affOk ? '#27ae60' : '#e74c3c'}">${affOk ? 'Has public' : 'No public'}</div></div>
+            <div><div class="sdc-label">Beds / 1,000</div><div class="sdc-val">${(d.beds_per_1000 || 0).toFixed(1)}</div></div>
+            <div><div class="sdc-label">Nearest hospital</div><div class="sdc-val">${tt}</div></div>
+            <div><div class="sdc-label">Population</div><div class="sdc-val">${formatNum(Math.round(d.population))}</div></div>
+            <div><div class="sdc-label">Public hosp.</div><div class="sdc-val">${d.public_hospitals || 0}</div></div>
+            <div><div class="sdc-label">Private hosp.</div><div class="sdc-val">${priv}</div></div>
+        </div>`;
+    } else {
+        const priorityColor = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
+        const col = priorityColor[d.ahp_priority] || '#27ae60';
+        body = `
         <div class="sdc-grid">
             <div><div class="sdc-label">AHP Score</div><div class="sdc-val" style="color:${col}">${d.ahp_score.toFixed(3)}</div></div>
             <div><div class="sdc-label">Priority</div><div class="sdc-val" style="color:${col}">${d.ahp_priority}</div></div>
@@ -503,6 +542,13 @@ function showSelectedDistrictCard(districtName) {
             <div><div class="sdc-label">Area km\u00b2</div><div class="sdc-val">${d.area_km2.toFixed(0)}</div></div>
             <div><div class="sdc-label">Density /km\u00b2</div><div class="sdc-val">${d.pop_density.toFixed(0)}</div></div>
         </div>`;
+    }
+
+    card.innerHTML = `
+        <div class="sdc-title">
+            <span>${d.district_name} <small style="color:#aaa;font-weight:400">${d.governorate}</small></span>
+            <span class="sdc-close" onclick="hideSelectedDistrictCard()">&times;</span>
+        </div>${body}`;
     card.style.display = 'block';
 }
 
