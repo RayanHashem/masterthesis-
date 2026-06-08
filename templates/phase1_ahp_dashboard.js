@@ -434,16 +434,26 @@ function refreshSupplyLayer() {
     const isHosp = ACTIVE_DATASET === 'hospitals';
     const list = isHosp ? (STATIONS || []).filter(_hospVisible) : (STATIONS || []);
     const markers = list.map(s => {
-        const isPub = isHosp && s.htype === 'public';
-        const color = isHosp ? (HOSP_COLOR[s.htype] || '#c0392b') : '#2c7fb8';
-        const m = L.circleMarker([s.lat, s.lon], {
-            pane: 'supplyPane',
-            radius: isPub ? 7 : 5,
-            color: '#ffffff', weight: isPub ? 2.5 : 1.5, fillColor: color, fillOpacity: 1,
-        });
+        let m;
         if (isHosp) {
+            // "H" badge marker, coloured by ownership (public larger/bolder).
+            const isPub = s.htype === 'public';
+            const sz = isPub ? 22 : 18;
+            m = L.marker([s.lat, s.lon], {
+                pane: 'supplyPane',
+                icon: L.divIcon({
+                    className: '',
+                    html: `<div class="hosp-marker ${s.htype || 'unknown'}">H</div>`,
+                    iconSize: [sz, sz],
+                    iconAnchor: [sz / 2, sz / 2],
+                }),
+            });
             m.on('click', () => showHospitalDetail(s));
         } else {
+            m = L.circleMarker([s.lat, s.lon], {
+                pane: 'supplyPane',
+                radius: 5, color: '#ffffff', weight: 1.5, fillColor: '#2c7fb8', fillOpacity: 1,
+            });
             m.bindPopup(`<b>EMS Station</b>` + (s.district_name ? `<br>${escapeHtml(s.district_name)}` : ''));
         }
         return m;
