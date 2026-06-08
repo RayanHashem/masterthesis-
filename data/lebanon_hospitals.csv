@@ -1,14 +1,11 @@
 name,lat,lon,beds,beds_estimated,beds_source,hospital_type,operator,operator_type,osm_id,geom_type
-,33.754292,35.544643,100,True,median-estimate,unknown,,,8345497073,Point
 حيدر و حجار,33.881996,35.504219,100,True,median-estimate,unknown,,,559988394,Point
 مستشفى العناية,33.099211,35.375441,100,True,median-estimate,unknown,,,330338737,Polygon
 Al Janoub Hospital,33.550968,35.368929,100,True,median-estimate,unknown,,,1035419371,Polygon
-Croix-Rouge Libanaise,33.851472,35.896341,100,True,median-estimate,unknown,,,617004379,Polygon
 مستشفى فقيه,33.434461,35.274197,100,True,median-estimate,unknown,,,836365776,Polygon
 Centre Hospitalier du Nord,34.368849,35.898107,144,False,syndicate-match,private,,,1041905069,Polygon
 مستشفی بلدیه برج البراجنه,33.841732,35.513126,100,True,median-estimate,unknown,,,5235355321,Point
 مستشفى مظلوم,34.431834,35.83277,100,True,median-estimate,unknown,,,3938046522,Point
-,33.375963,35.61636,100,True,median-estimate,unknown,,,474027856,Polygon
 مستشفى المنلا,34.44087,35.829893,100,True,median-estimate,unknown,,,4986254041,Point
 Health Medical Center,33.553364,35.369923,100,True,median-estimate,unknown,,,1035420576,Polygon
 Rahma Medical Center,34.413735,35.845734,100,True,median-estimate,unknown,,,837101482,Polygon
@@ -24,7 +21,6 @@ Bchamoun Hospital,33.782867,35.523148,100,True,median-estimate,unknown,,,4661434
 المستشفى اللبناني الإيطالي,33.253656,35.224604,100,True,median-estimate,unknown,,,4531962595,Point
 مستشفى سان جورج,33.960219,35.68749,100,True,median-estimate,unknown,,,837158168,Polygon
 Safad Hospital,34.443722,35.870013,100,True,median-estimate,unknown,,,9367907207,Point
-,33.534733,35.362657,100,True,median-estimate,unknown,,,8252121874,Point
 مستشفى حمود,33.560857,35.375747,100,True,median-estimate,unknown,,,975076458,Polygon
 Kherbet Kanafar Governmental Hospital,33.639281,35.726615,100,True,median-estimate,public,,public,779565645,Polygon
 مستشفى معربس,33.872974,35.519007,100,True,median-estimate,unknown,,,3561187768,Point
@@ -81,11 +77,9 @@ Al Jabal Hospital,33.847025,35.723642,100,True,median-estimate,unknown,,,1052987
 مستشفى سانت تريز الحدث,33.844301,35.527136,100,True,median-estimate,unknown,,,519087818,Polygon
 مساشفى بعبدا الحكومي,33.835516,35.538833,100,True,median-estimate,public,,public,835247321,Polygon
 مستشفى النجدة الشعبية,33.392946,35.490444,100,True,median-estimate,unknown,,,2706923700,Point
-,33.662925,35.419934,100,True,median-estimate,unknown,,,1044591407,Polygon
 Medrar Medical Center,33.352342,35.452544,100,True,median-estimate,unknown,,,837160787,Polygon
 Mays El Jabal Governmental Hospital,33.186934,35.521165,100,True,median-estimate,public,,public,1042395104,Polygon
 Hermel Governmental Hospital,34.381839,36.424349,100,True,median-estimate,public,,,842710796,Polygon
-الصليب الأحمر اللبناني,34.305233,35.813454,100,True,median-estimate,unknown,,,311125957,Point
 دار العجزة الاسلامية,33.868079,35.49893,700,False,syndicate-verified(nominatim-verified;merged),private,,,5087545,Polygon
 Rayak Hospital,33.863964,36.01079,125,False,syndicate-match,private,,,1047497756,Polygon
 Al Sharq Al Awsat Hospital,34.038475,36.192006,100,True,median-estimate,unknown,,,1116373785,Polygon
@@ -103,13 +97,11 @@ Deir El Qamar Governmental Hospital,33.705129,35.57417,100,True,median-estimate,
 El Hajj Hospital,33.98896,35.715161,10,False,syndicate-match,private,,,1041715172,Polygon
 مستشفى النبطية الحكومي,33.3896,35.482849,100,True,median-estimate,public,,,1053701650,Polygon
 Islamic Hospital,34.442374,35.832394,100,True,median-estimate,unknown,,,1052244722,Polygon
-الصليب الأحمر اللبناني,33.258824,35.213435,100,True,median-estimate,unknown,,,3893208566,Point
 مستشفى سان جورج,33.83701,35.527,100,True,median-estimate,unknown,,,311095794,Polygon
 Hôpital Borgi,34.298878,35.821775,35,False,syndicate-match,private,,,1043703184,Polygon
 مستشفى الشيخ راغب حرب,33.389183,35.440258,100,True,median-estimate,unknown,,,1321433640,Polygon
 مستشفى الشفاء,34.415918,35.843059,100,True,median-estimate,unknown,,,327364735,Polygon
 مستشفى الروم,33.894219,35.523949,210,False,syndicate-verified(nominatim-verified;merged),private,,,284813931,Polygon
-,33.376239,35.616326,100,True,median-estimate,unknown,,,474027855,Polygon
 مستشفى البرج,33.842733,35.509325,100,True,median-estimate,unknown,,,6501545587,Point
 مستشفى بهمن,33.853549,35.506105,200,False,syndicate-verified(nominatim-verified;merged),private,,,519084764,Polygon
 المركز الصحي المتطور,34.627838,36.318275,100,True,median-estimate,unknown,,,1044458284,Polygon
@@ -138,11 +130,8 @@ Tatari Hospital,34.010793,36.205755,35,False,syndicate-match,private,,,787541303
 مستشفى بحنس,33.905149,35.656312,100,True,median-estimate,unknown,,,802992023,Polygon
 Saida Governmental Hospital,33.54605,35.381829,100,True,median-estimate,public,,,837909683,Polygon
 مستشفى سيدة المعونات جبيل,34.128162,35.658861,100,True,median-estimate,unknown,,,3854937270,Point
-,33.764025,35.482499,100,True,median-estimate,unknown,,,1299180335,Polygon
 مستشفى سان لويس جونية,33.993095,35.640727,100,True,median-estimate,unknown,,,303946250,Polygon
 Taanayel General Hospital,33.794181,35.877756,100,True,median-estimate,unknown,,,7813286239,Point
-الصليب الأحمر اللبناني;الصليب الاحمر الجميزة,33.894911,35.516733,100,True,median-estimate,unknown,,,478650547,Polygon
-الصليب الأخمر,33.833377,35.541932,100,True,median-estimate,unknown,,,3068442398,Point
 Cortbawi Institute and Rehabilitation Hospital,34.019701,35.64853,100,True,median-estimate,unknown,,,835242180,Polygon
 مركز كسروان الإستشفائي,34.010288,35.647804,100,True,median-estimate,unknown,,,835053990,Polygon
 Azounieh Hospital,33.772054,35.70632,100,True,median-estimate,unknown,,,1043711498,Polygon
@@ -154,7 +143,6 @@ Tannourine Governmental Hospital,34.212675,35.860786,100,True,median-estimate,pu
 Hospital Haykel,34.412535,35.832422,100,True,median-estimate,unknown,,,995463969,Polygon
 Rosary Sisters Hospital,33.895671,35.515061,100,True,median-estimate,unknown,,,291591921,Point
 West Bekaa Hospital,33.515975,35.7016,100,True,median-estimate,unknown,,,1052513262,Polygon
-Rass Beirut Pharmacy,33.896695,35.485217,100,True,median-estimate,unknown,,,2214678948,Point
 لبيب,33.556007,35.373948,100,True,median-estimate,unknown,,,386796001,Point
 Bint Jbeil Governmental Hospital,33.127767,35.435531,100,True,median-estimate,public,,,1047470386,Polygon
 Al Birah Hospital,34.592199,36.231846,100,True,median-estimate,unknown,,,1050028052,Polygon

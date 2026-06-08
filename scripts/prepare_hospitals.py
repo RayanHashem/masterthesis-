@@ -47,14 +47,42 @@ def parse_beds(val):
         return None
 
 
+# Names/tags that are NOT real hospitals even when OSM tags them as one.
+# NOTE: Red-Cross/Crescent branches are EMS/first-aid stations, not hospitals.
+# We match "الصليب الأحمر" (red cross) specifically so the psychiatric
+# "Hospital of the Cross" (مستشفى الصليب للأمراض العقلية) is NOT excluded.
+EXCLUDE_KEYWORDS = (
+    'pharmac', 'صيدل',                       # pharmacies
+    'red cross', 'red crescent',             # EN
+    'croix-rouge', 'croix rouge',            # FR
+    'الصليب الأحمر', 'الصليب الأخمر',          # AR red cross (+ common typo)
+    'الهلال الأحمر',                          # AR red crescent
+)
+
+
+def is_excluded(name, p):
+    """True if this feature is a pharmacy / Red-Cross branch / unnamed."""
+    if p.get('amenity') == 'pharmacy' or p.get('healthcare') == 'pharmacy':
+        return True
+    if not name:                              # drop unnamed hospitals
+        return True
+    low = name.lower()
+    return any(k in low for k in EXCLUDE_KEYWORDS)
+
+
 def main():
     with open(SRC, encoding='utf-8') as f:
         gj = json.load(f)
 
     rows = []
+    excluded = 0
     for feat in gj['features']:
         p = feat.get('properties', {}) or {}
         if p.get('amenity') != 'hospital' and p.get('healthcare') != 'hospital':
+            continue
+        name = (p.get('name:en') or p.get('name') or '').strip()
+        if is_excluded(name, p):
+            excluded += 1
             continue
         g = feat.get('geometry')
         if not g:
@@ -66,7 +94,7 @@ def main():
         if not (LON_MIN <= lon <= LON_MAX and LAT_MIN <= lat <= LAT_MAX):
             continue
         rows.append({
-            'name': (p.get('name:en') or p.get('name') or '').strip(),
+            'name': name,
             'lat': round(lat, 6),
             'lon': round(lon, 6),
             'beds_raw': parse_beds(p.get('beds')),
@@ -75,6 +103,7 @@ def main():
             'osm_id': str(p.get('osm_id') or ''),
             'geom_type': g['type'],
         })
+    print(f"  excluded {excluded} non-hospitals (unnamed / pharmacy / Red Cross)")
 
     # Dedupe by osm_id (keep first)
     seen = set()
