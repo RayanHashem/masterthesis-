@@ -33,16 +33,60 @@ DEDUP_METERS = 300  # a curated point within this distance of an OSM point = sam
 
 # Hand-verified large hospitals NOT reliably present in OSM. Coordinates verified
 # individually (Wikidata / Nominatim result that names the hospital itself).
+# (Makassed and Sacré-Cœur were removed — they exist in OSM under Arabic names
+#  and are now matched via ARABIC_BED_MATCHES, avoiding duplicate points.)
 VERIFIED_BIG = [
     # name, beds, lat, lon, coord_source
     ("Dar Al-Ajaza Al-Islamia Hospital", 700, 33.8680, 35.4988, "nominatim-verified"),
     ("American University of Beirut Medical Center", 400, 33.8980, 35.4859, "wikidata"),
-    ("Sacre Coeur Hospital", 234, 33.8863, 35.5644, "nominatim-verified"),
     ("Dar Al-Amal University Hospital", 220, 33.9840, 36.1611, "nominatim-verified"),
     ("Saint George Hospital University Medical Center", 210, 33.8942, 35.5238, "nominatim-verified"),
-    ("Makassed General Hospital", 200, 33.8869, 35.5120, "nominatim-verified"),
     ("Bahman Hospital", 200, 33.8535, 35.5061, "nominatim-verified"),
 ]
+
+# Curated Arabic-name → Syndicate bed-count matches (keyed by OSM id for stability).
+# Each was read and matched by hand against the Syndicate list (name + region).
+ARABIC_BED_MATCHES = {
+    '3938046522': 75,   # مظلوم → New Hospital Mazloum
+    '4986254041': 84,   # المنلا → Mounla
+    '467941851': 70,    # الأرز الزلقا → Arz
+    '5818614453': 120,  # جبل عامل → Jabal Amel
+    '2932842648': 150,  # السان شارل → St Charles
+    '837158168': 100,   # سان جورج (Ajaltoun) → Hopital Saint Georges - Ajaltoun
+    '975076458': 300,   # حمود → Hammoud
+    '3561187768': 20,   # معربس → Maarbes
+    '835250420': 430,   # أوتيل ديو → Hotel Dieu de France
+    '994902555': 150,   # بلفو → Bellevue Medical Center
+    '842359835': 137,   # عين وزين → Ain Wazein
+    '6205014685': 13,   # بخعازي → Bekhaazi
+    '1052515181': 200,  # المقاصد → Makassed
+    '844266947': 907,   # الصليب للأمراض العقلية → Psychiatric Hospital of the Cross
+    '642515061': 200,   # الزهراء → Al Zahraa University Hospital
+    '4461868278': 60,   # سرحال → Hopital Dr S. Serhal
+    '4966703572': 100,  # الراعي → Raii
+    '284812334': 150,   # الجعيتاوي → Hopital Libanais (Geitaoui)
+    '236020132': 240,   # الرسول الأعظم → Al-Rassoul Al-Aazam
+    '409468812': 150,   # جبل لبنان → Mount Lebanon Hospital
+    '519087818': 130,   # سانت تريز الحدث → Hôpital Sainte Thérèse
+    '2706923700': 75,   # النجدة الشعبية → Secours Populaire Libanais-Nabatieh
+    '4923267521': 50,   # شاهين → Hopital Chahine
+    '409961805': 50,    # الحايك → Hopital Hayek
+    '1321433640': 37,   # الشيخ راغب حرب → Ragheb Harb
+    '4522495797': 50,   # البيسار → Al Bissar Hospital
+    '993574780': 130,   # بيت شباب → Beit Chabab
+    '802992023': 78,    # بحنس → Bhannes
+    '303946250': 65,    # سان لويس جونية → St Louis
+    '305423504': 100,   # اللبناني الكندي → Libano-Canadien
+    '3061157514': 32,   # شتورا → Chtoura Hospital
+    '386796001': 120,   # لبيب → Labib Medical Center
+    '835249938': 160,   # رزق → Clinique Dr. Rizk
+    '1181973647': 120,  # خوري → Khoury General Hospital - Zahle
+    '445619060': 200,   # الشرق الأوسط الصحي الجامعي → Middle East Institute of Health
+    '835863086': 159,   # مار يوسف → St Joseph - Najjar Medical Center
+    '386795333': 100,   # دلاعة → Dalla'a General Hospital
+    '1857670915': 128,  # النيني → Nini hospital
+    '583705258': 234,   # قلب يسوع → Sacre Coeur
+}
 
 STOP = {'hospital','medical','center','centre','hopital','clinique','clinic',
         'university','of','the','de','el','al','la','st','saint'}
@@ -115,6 +159,15 @@ def main():
             r["beds"] = int(best["beds"])
             r["beds_source"] = "syndicate-match"
             n_match += 1
+
+    # 2b) Curated Arabic-name matches (keyed by OSM id) → real beds
+    n_arabic = 0
+    for r in osm:
+        beds = ARABIC_BED_MATCHES.get(str(r.get("osm_id", "")))
+        if beds:
+            r["beds"] = int(beds)
+            r["beds_source"] = "syndicate-arabic"
+            n_arabic += 1
 
     # 3) Hand-verified big hospitals: merge into nearby OSM point, else add new
     added = []
@@ -205,6 +258,7 @@ def main():
     real = sum(1 for r in rows if not r["beds_estimated"])
     print(f"OK: {len(rows)} hospitals total")
     print(f"  name-matched (syndicate): {n_match}")
+    print(f"  arabic-name matched: {n_arabic}")
     print(f"  hand-verified added/merged: {len(VERIFIED_BIG)}  (new points: {len(added) - n_manual})")
     print(f"  manual-coords added: {n_manual}")
     print(f"  REAL bed counts now: {real} / {len(rows)}  (was 3)")

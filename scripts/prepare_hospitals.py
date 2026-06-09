@@ -60,13 +60,27 @@ EXCLUDE_KEYWORDS = (
 )
 
 
+# Reviewed non-hospitals mis-tagged as hospital in OSM (dispensaries, labs, a
+# cosmetic-surgery building, Civil Defense, a defunct site, health centres).
+EXCLUDE_OSM_IDS = {
+    '4422870691', '6442822186', '9294354428', '1889842734', '211453309',
+    '348352536', '1044458284', '3707567031', '4048571547', '4547573490',
+    '7930789032',
+}
+
+
 def is_excluded(name, p):
-    """True if this feature is a pharmacy / Red-Cross branch / unnamed."""
+    """True if this feature is a pharmacy / Red-Cross branch / dispensary /
+    reviewed non-hospital / unnamed."""
     if p.get('amenity') == 'pharmacy' or p.get('healthcare') == 'pharmacy':
+        return True
+    if str(p.get('osm_id') or '') in EXCLUDE_OSM_IDS:
         return True
     if not name:                              # drop unnamed hospitals
         return True
     low = name.lower()
+    if 'مستوصف' in low:                        # dispensary, not a hospital
+        return True
     return any(k in low for k in EXCLUDE_KEYWORDS)
 
 
