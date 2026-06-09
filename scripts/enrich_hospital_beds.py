@@ -25,7 +25,10 @@ RAW_GEOJSON = os.path.join(DATA_DIR, "lebanon_healthsites.geojson")
 SYN_CSV = os.path.join(DATA_DIR, "lebanon_hospitals_syndicate.csv")
 MANUAL_CSV = os.path.join(DATA_DIR, "hospitals_manual_coords.csv")
 
-MATCH_THRESHOLD = 0.6
+MATCH_THRESHOLD = 0.5
+# Reviewed false positives at the 0.5 threshold — generic/ambiguous Syndicate
+# names that fuzzy-match the wrong OSM hospital. Skip these specific pairings.
+MATCH_BLOCKLIST_SYN = {'beirut', 'jabal amel', 'el bekaa'}
 DEDUP_METERS = 300  # a curated point within this distance of an OSM point = same hospital
 
 # Hand-verified large hospitals NOT reliably present in OSM. Coordinates verified
@@ -107,7 +110,8 @@ def main():
             sc = jac(ot, norm(s["name"]))
             if sc > bsc:
                 bsc, best = sc, s
-        if best and bsc >= MATCH_THRESHOLD and best["beds"]:
+        if (best and bsc >= MATCH_THRESHOLD and best["beds"]
+                and best["name"].strip().lower() not in MATCH_BLOCKLIST_SYN):
             r["beds"] = int(best["beds"])
             r["beds_source"] = "syndicate-match"
             n_match += 1
@@ -162,9 +166,11 @@ def main():
 
     # ── Public / private classification ──────────────────────────────────────
     # Lebanese public hospitals are almost all named "<Place> Governmental
-    # Hospital" / "...الحكومي"; OSM also carries an operator_type tag. We treat a
-    # Syndicate-of-Hospitals match as private (that body covers private hospitals).
-    n_pub = n_priv = n_unk = 0
+    # Hospital" / "...الحكومي"; OSM also carries an operator_type tag. Anything
+    # confirmed not-public is private. With pharmacies/Red-Cross/unnamed already
+    # removed, the remaining untagged hospitals are private by inference (Lebanon
+    # is ~88% private) — flagged via ownership_source so the inference is explicit.
+    n_pub = n_priv_tag = n_priv_inf = 0
     for r in rows:
         text = f"{r.get('name','')} {r.get('operator','')}".lower()
         otype = (r.get("operator_type") or "").lower()
@@ -175,17 +181,21 @@ def main():
         )
         if is_public:
             r["hospital_type"] = "public"
+            r["ownership_source"] = "tagged"
             n_pub += 1
         elif otype in ("private", "business") or bsrc.startswith("syndicate"):
             r["hospital_type"] = "private"
-            n_priv += 1
+            r["ownership_source"] = "tagged"
+            n_priv_tag += 1
         else:
-            r["hospital_type"] = "unknown"
-            n_unk += 1
+            r["hospital_type"] = "private"
+            r["ownership_source"] = "inferred"
+            n_priv_inf += 1
 
     # Write
     fields = ["name", "lat", "lon", "beds", "beds_estimated", "beds_source",
-              "hospital_type", "operator", "operator_type", "osm_id", "geom_type"]
+              "hospital_type", "ownership_source", "operator", "operator_type",
+              "osm_id", "geom_type"]
     with open(OSM_CSV, "w", newline="", encoding="utf-8") as fh:
         w = csv.DictWriter(fh, fieldnames=fields)
         w.writeheader()
@@ -199,7 +209,7 @@ def main():
     print(f"  manual-coords added: {n_manual}")
     print(f"  REAL bed counts now: {real} / {len(rows)}  (was 3)")
     print(f"  median used for the remaining {len(rows) - real} estimates: {median_beds}")
-    print(f"  type — public: {n_pub} | private: {n_priv} | unknown: {n_unk}")
+    print(f"  type — public: {n_pub} | private (tagged): {n_priv_tag} | private (inferred): {n_priv_inf}")
     print(f"Wrote {OSM_CSV}")
 
 

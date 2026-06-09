@@ -1585,7 +1585,8 @@ for _, r in hospitals_df.iterrows():
         'name': nm if nm else 'Unnamed hospital',
         'beds': int(r['beds']), 'beds_estimated': bool(r['beds_estimated']),
         'operator': _clean_str(r.get('operator', '')),
-        'htype': _clean_str(r.get('hospital_type', '')) or 'unknown',
+        'htype': _clean_str(r.get('hospital_type', '')) or 'private',
+        'osrc': _clean_str(r.get('ownership_source', '')),
     })
 
 # Hospital proposals are deferred to a follow-up task (the grid/clustering

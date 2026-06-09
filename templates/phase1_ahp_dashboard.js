@@ -465,8 +465,9 @@ function refreshSupplyLayer() {
 function showHospitalDetail(s) {
     const card = document.getElementById('hospital-detail-card');
     if (!card) return;
-    const typeText = { public: 'Public', private: 'Private', unknown: 'Private / unknown' }[s.htype] || 'Unknown';
-    const badge = `<span class="hdc-badge" style="background:${HOSP_COLOR[s.htype] || '#7f8c8d'}">${typeText}</span>`;
+    const typeText = s.htype === 'public' ? 'Public'
+        : (s.osrc === 'inferred' ? 'Private (inferred)' : 'Private');
+    const badge = `<span class="hdc-badge" style="background:${HOSP_COLOR[s.htype] || '#c0392b'}">${typeText}</span>`;
     const beds = s.beds_estimated ? `${s.beds} <em>(estimated)</em>` : `${s.beds}`;
     const rows = [
         ['Status', badge],
