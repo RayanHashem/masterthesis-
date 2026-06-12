@@ -1213,6 +1213,44 @@ body {
 
 .model-weights-details summary:hover { color: var(--text-2); }
 
+/* ── RECOMMENDED INTERVENTIONS (hospital Analysis tab) ───────────────────── */
+.iv-card { cursor: pointer; }
+
+.iv-district { font-size: 13px; color: var(--text); flex: 1; }
+
+.iv-chip {
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    padding: 2px 7px;
+    border-radius: 9px;
+    border: 1px solid var(--border-2);
+    color: var(--text-2);
+    white-space: nowrap;
+}
+
+.iv-capacity  { border-color: #e74c3c; color: #e74c3c; }
+.iv-no_public { border-color: #9b59b6; color: #9b59b6; }
+.iv-access    { border-color: #3498db; color: #3498db; }
+
+.iv-action {
+    margin-top: 6px;
+    font-size: 11px;
+    color: var(--text-2);
+}
+
+/* Facility halos for intervention highlights (public = stronger) */
+.hosp-halo {
+    box-shadow: 0 0 0 3px rgba(255,255,255,0.55), 0 0 12px 4px rgba(255,255,255,0.35);
+    border-radius: 50%;
+}
+
+.hosp-halo-strong {
+    box-shadow: 0 0 0 4px rgba(255,255,255,0.9), 0 0 16px 6px rgba(255,255,255,0.55);
+    border-radius: 50%;
+}
+
 /* ── HIDE NATIVE LEAFLET LAYER CONTROL ───────────────────────────────────── */
 .leaflet-control-layers { display: none !important; }
 
