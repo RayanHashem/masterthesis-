@@ -695,6 +695,28 @@ function _updateWeightDisplay(normW) {
         const segEl = document.getElementById('wbar-' + c.id);
         if (segEl) { segEl.style.width = pct + '%'; segEl.style.background = _SEG_COLORS[i % _SEG_COLORS.length]; }
     });
+    _updateHospFormulaLine(normW);
+}
+
+/** Plain-word names for the formula line. */
+const _FORMULA_WORDS = { access_gap: 'travel', pop_density: 'density', exposed_pop: 'exposure', bed_gap: 'beds' };
+const _PRESET_LABELS = { balanced: 'Balanced', access: 'Access', population: 'Population', capacity: 'Capacity' };
+
+/** Updates the hospital formula line + preset chip (no-op when not rendered, e.g. EMS). */
+function _updateHospFormulaLine(normW) {
+    const pctsEl = document.getElementById('hosp-formula-pcts');
+    if (!pctsEl) return;
+    pctsEl.innerHTML = CRITERIA_CONFIG.map(c =>
+        `<b>${Math.round((normW[c.id] || 0) * 100)}% ${_FORMULA_WORDS[c.id] || c.id}</b>`).join(' &middot; ');
+    const chipEl = document.getElementById('hosp-formula-chip');
+    if (chipEl) chipEl.textContent = _activePreset ? (_PRESET_LABELS[_activePreset] || _activePreset) : 'Custom';
+}
+
+/** A weight slider was moved by hand: preset becomes Custom, everything recomputes. */
+function onHospWeightInput() {
+    _activePreset = null;
+    document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('preset-btn-active'));
+    recomputeAhpScores();
 }
 
 /** Computes the hospital "gap in four terms" from DISTRICTS + current settings.
