@@ -1011,6 +1011,76 @@ body {
     background: rgba(39,174,96,0.14); color: var(--pri-low); border: 1px solid rgba(39,174,96,0.45);
 }
 
+/* ── Hospital "gap in four terms" cards (Model tab) ────────────────────────── */
+.gap-cards { display: flex; flex-direction: column; gap: 8px; }
+
+.gap-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-1);
+    border-left: 3px solid var(--text-mute);
+    border-radius: 6px;
+    overflow: hidden;
+}
+.gap-card.capacity { border-left-color: #e74c3c; }
+.gap-card.access   { border-left-color: #3498db; }
+.gap-card.afford   { border-left-color: #9b59b6; }
+.gap-card.priority { border-left-color: #1abc9c; }
+.gap-card.is-ok { border-left-color: #27ae60; }
+.gap-card.is-ok .gap-card-head { color: var(--pri-low); }
+
+.gap-card-summary {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 9px 11px;
+    cursor: pointer;
+    list-style: none;
+    user-select: none;
+}
+.gap-card-summary::-webkit-details-marker { display: none; }
+.gap-card-icon { font-size: 17px; line-height: 1; }
+.gap-card-text { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.gap-card-title {
+    font-size: 10px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.07em; color: var(--text-mute);
+}
+.gap-card-head {
+    font-size: 15px; font-weight: 700; color: var(--text);
+    font-variant-numeric: tabular-nums;
+}
+.gap-card-caret {
+    color: var(--text-2);
+    font-size: 20px;
+    line-height: 1;
+    transition: transform 0.15s;
+    flex-shrink: 0;
+    align-self: center;
+}
+.gap-card-summary:hover .gap-card-caret { color: var(--text); }
+.gap-card[open] .gap-card-caret { transform: rotate(180deg); }
+
+.gap-card-sub {
+    padding: 0 11px 8px 11px;
+    font-size: 11.5px;
+    color: var(--text-2);
+    line-height: 1.45;
+}
+.gap-dist-list { padding: 0 8px 9px 8px; display: flex; flex-direction: column; gap: 3px; }
+.gap-dist-row {
+    display: flex; justify-content: space-between; align-items: center; gap: 8px;
+    padding: 4px 8px; background: var(--bg-panel); border: 1px solid var(--border-1);
+    border-radius: 4px; font-size: 12px; cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+}
+.gap-dist-row:hover { background: var(--bg-card-2); border-color: var(--border-2); }
+.gap-dist-name { color: var(--text-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gap-dist-metric { color: var(--text-mute); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.gap-dist-empty { padding: 4px 8px; color: var(--text-mute); font-size: 11.5px; }
+.gap-pri { font-weight: 700; }
+.gap-pri.high   { color: var(--pri-high); }
+.gap-pri.medium { color: var(--pri-med); }
+.gap-pri.low    { color: var(--pri-low); }
+
 .analysis-controls {
     display: flex;
     gap: 8px;
@@ -1100,6 +1170,47 @@ body {
     border-top: 1px solid var(--border-1);
     margin-top: 4px;
 }
+
+/* ── COMPACT MODEL SETUP (hospitals) ─────────────────────────────────────── */
+.model-compact-controls {
+    padding: 8px 10px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    border: 1px solid var(--border-1);
+    margin-bottom: 4px;
+}
+
+.model-compact-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 4px 0;
+    cursor: help;
+}
+
+.model-compact-row .filter-slider { flex: 1; }
+
+.model-compact-label {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-2);
+    white-space: nowrap;
+    flex-shrink: 0;
+    min-width: 124px;
+}
+
+.model-compact-reset {
+    text-align: right;
+    margin: 2px 0 8px;
+}
+
+.model-compact-reset a {
+    font-size: 11px;
+    color: var(--text-mute);
+    text-decoration: none;
+}
+
+.model-compact-reset a:hover { color: var(--text-2); text-decoration: underline; }
 
 /* ── HIDE NATIVE LEAFLET LAYER CONTROL ───────────────────────────────────── */
 .leaflet-control-layers { display: none !important; }

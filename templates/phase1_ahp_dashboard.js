@@ -696,10 +696,103 @@ function _updateWeightDisplay(normW) {
     });
 }
 
+/** Computes the hospital "gap in four terms" from DISTRICTS + current settings.
+ *  Pure read of embedded per-district fields; no Python re-run needed. */
+function computeHospitalGaps() {
+    const bench = _getBenchmark();
+    const thr   = _getThreshold();
+    let totalPop = 0, bedShort = 0, exposedPop = 0, noPublicPop = 0;
+    const underCap = [], poorAccess = [], noPublic = [];
+    DISTRICTS.forEach(d => {
+        const pop = d.population || 0;
+        totalPop += pop;
+        const bpk = d.beds_per_1000 || 0;
+        if (bpk < bench) { bedShort += (bench - bpk) * pop / 1000; underCap.push(d); }
+        const tt = d.min_travel_time_min;
+        if (tt !== null && tt !== undefined && tt > thr) { exposedPop += pop; poorAccess.push(d); }
+        if ((d.public_hospitals || 0) === 0) { noPublic.push(d); noPublicPop += pop; }
+    });
+    const counts = { High: 0, Medium: 0, Low: 0 };
+    DISTRICTS.forEach(d => { if (counts[d.ahp_priority] !== undefined) counts[d.ahp_priority]++; });
+    return {
+        bench, thr, totalPop,
+        capacity: { beds: Math.round(bedShort), districts: underCap.sort((a, b) => a.beds_per_1000 - b.beds_per_1000) },
+        access:   { people: Math.round(exposedPop), pct: totalPop ? Math.round(exposedPop / totalPop * 100) : 0,
+                    districts: poorAccess.sort((a, b) => (b.min_travel_time_min || 0) - (a.min_travel_time_min || 0)) },
+        afford:   { people: Math.round(noPublicPop), districts: noPublic.sort((a, b) => (b.population || 0) - (a.population || 0)) },
+        priority: { counts, districts: [...DISTRICTS].sort((a, b) => (b.ahp_score || 0) - (a.ahp_score || 0)) },
+    };
+}
+
+/** Renders the four hospital "gap" cards (Capacity · Access · Affordability · Priority). */
+function renderHospitalGapResults(el) {
+    const g   = computeHospitalGaps();
+    const fmt = n => Math.round(n).toLocaleString('en-US');
+    const esc = s => String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+    const list = (districts, metricFn, n = 5) =>
+        districts.slice(0, n).map(d =>
+            `<div class="gap-dist-row" onclick="onDistrictCardClick('${esc(d.district_name)}')">
+                <span class="gap-dist-name">${d.district_name}</span>
+                <span class="gap-dist-metric">${metricFn(d)}</span>
+            </div>`).join('') || '<div class="gap-dist-empty">None — no gap on this lens.</div>';
+
+    const capOk = g.capacity.beds <= 0;
+    const accOk = g.access.people <= 0;
+    const affOk = g.afford.districts.length === 0;
+    const cards = [
+        { cls: 'capacity', icon: '&#127973;', title: 'Capacity', ok: capOk,
+          head: capOk ? '&#10003; At benchmark' : `${fmt(g.capacity.beds)} beds short`,
+          sub: capOk
+            ? `Every district is at or above the ${g.bench.toFixed(1)} beds/1,000 benchmark.`
+            : `${g.capacity.districts.length} districts below the ${g.bench.toFixed(1)} beds/1,000 benchmark.`,
+          body: list(g.capacity.districts, d => `${(d.beds_per_1000 || 0).toFixed(2)}/1k`) },
+        { cls: 'access', icon: '&#128657;', title: 'Access', ok: accOk,
+          head: accOk ? '&#10003; No access gap' : `${fmt(g.access.people)} people · ${g.access.pct}%`,
+          sub: accOk
+            ? `No district is beyond ${g.thr} min from a hospital — <em>access</em> is broadly adequate; the gap is distribution &amp; affordability.`
+            : `live &gt;${g.thr} min from a hospital, across ${g.access.districts.length} districts.`,
+          body: list(g.access.districts, d => d.min_travel_time_min != null ? `${Math.round(d.min_travel_time_min)} min` : '—') },
+        { cls: 'afford', icon: '&#128176;', title: 'Affordability', ok: affOk,
+          head: affOk ? '&#10003; All covered' : `${g.afford.districts.length} districts`,
+          sub: affOk
+            ? `Every district has at least one public hospital.`
+            : `${fmt(g.afford.people)} people have no public hospital (affordable-care gap).`,
+          body: list(g.afford.districts, d => `${fmt(d.population)} ppl`) },
+        { cls: 'priority', icon: '&#127919;', title: 'Overall priority', ok: false,
+          head: `${g.priority.counts.High} high-priority`,
+          sub: `most under-served districts by your weights — ${g.priority.counts.High} high / ${g.priority.counts.Medium} med / ${g.priority.counts.Low} low.`,
+          body: list(g.priority.districts, d => `<span class="gap-pri ${(d.ahp_priority || 'Low').toLowerCase()}">${d.ahp_priority || 'Low'}</span> ${(d.ahp_score || 0).toFixed(3)}`) },
+    ];
+
+    // Cards start closed; re-renders (slider moves) keep whatever the user opened.
+    const openCards = new Set(
+        Array.from(el.querySelectorAll('details.gap-card[open]'))
+             .map(d => Array.from(d.classList).find(c => ['capacity','access','afford','priority'].includes(c)))
+             .filter(Boolean));
+
+    el.innerHTML = `<div class="model-results-title">The gap — in four terms</div>
+        <div class="gap-cards">
+            ${cards.map(c => `
+                <details class="gap-card ${c.cls}${c.ok ? ' is-ok' : ''}"${openCards.has(c.cls) ? ' open' : ''}>
+                    <summary class="gap-card-summary">
+                        <span class="gap-card-icon">${c.icon}</span>
+                        <span class="gap-card-text">
+                            <span class="gap-card-title">${c.title}</span>
+                            <span class="gap-card-head">${c.head}</span>
+                        </span>
+                        <span class="gap-card-caret">&#9662;</span>
+                    </summary>
+                    <div class="gap-card-sub">${c.sub}</div>
+                    <div class="gap-dist-list">${c.body}</div>
+                </details>`).join('')}
+        </div>`;
+}
+
 /** Updates the Results section inside the Model tab after any recompute. */
 function renderModelResults() {
     const el = document.getElementById('model-results-section');
     if (!el) return;
+    if (ACTIVE_DATASET === 'hospitals') { renderHospitalGapResults(el); return; }
 
     const candidates = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
 
@@ -774,16 +867,59 @@ function _toggleShowAllProposed() {
 }
 
 /** Renders the full Model tab content from CRITERIA_CONFIG. */
+/** National population-weighted beds/1,000 (the default capacity benchmark). */
+function _natAvgBeds() {
+    let beds = 0, pop = 0;
+    DISTRICTS.forEach(d => { beds += (d.beds_per_1000 || 0) * (d.population || 0); pop += (d.population || 0); });
+    return pop > 0 ? beds / pop : 0;
+}
+/** Current capacity benchmark (beds/1,000) from the slider, else the national default. */
+function _getBenchmark() {
+    const el = document.getElementById('model-benchmark');
+    return el ? parseFloat(el.value) : Math.round(_natAvgBeds() * 10) / 10;
+}
+/** Current coverage threshold (min) from the slider, else the dataset default. */
+function _getThreshold() {
+    const el = document.getElementById('coverage-threshold');
+    return el ? parseFloat(el.value)
+              : (typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 30);
+}
+
 function renderModelTab() {
     const panel = document.getElementById('tab-model');
     if (!panel) return;
+    const isHosp     = ACTIVE_DATASET === 'hospitals';
     const hasTT      = DISTRICTS.length > 0 && DISTRICTS[0].min_travel_time_min !== null && DISTRICTS[0].min_travel_time_min !== undefined;
     const defaultThr = typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 10;
-    const supplyWord = ACTIVE_DATASET === 'hospitals' ? 'hospital' : 'station';
+    const supplyWord = isHosp ? 'hospital' : 'station';
 
-    // ── Results section (populated by renderModelResults after recompute) ──
-    let html = `<div class="model-results-section" id="model-results-section"></div>
-        <div class="model-setup-label">&#9881; Setup</div>
+    const resultsBlock = `<div class="model-results-section" id="model-results-section"></div>`;
+
+    // ── Setup: coverage threshold ──
+    let setup;
+    if (isHosp) {
+        // Compact one-row-per-control layout so the gap results stay above the fold.
+        const benchDefault = Math.round(_natAvgBeds() * 10) / 10;
+        setup = `<div class="model-setup-label">&#9881; Setup</div>
+        <div class="model-compact-controls ${hasTT ? '' : 'model-disabled'}">
+            ${!hasTT ? '<div class="model-note">&#9888; Re-run the Python script to enable live threshold control.</div>' : ''}
+            <div class="model-compact-row" title="Districts are &quot;exposed&quot; if travel time to nearest hospital exceeds this value.">
+                <span class="model-compact-label">Coverage Threshold</span>
+                <input type="range" id="coverage-threshold" class="filter-slider"
+                    min="5" max="60" step="5" value="${defaultThr}"
+                    oninput="document.getElementById('cov-thr-val').textContent=this.value+' min'; recomputeAhpScores()">
+                <span class="model-value" id="cov-thr-val">${defaultThr} min</span>
+            </div>
+            <div class="model-compact-row" title="Districts below this beds-per-1,000 level are &quot;under-capacity&quot;. Default = national average.">
+                <span class="model-compact-label">Capacity Benchmark</span>
+                <input type="range" id="model-benchmark" class="filter-slider"
+                    min="1" max="6" step="0.1" value="${benchDefault}"
+                    oninput="document.getElementById('bench-val').textContent=this.value+' /1k'; renderModelResults()">
+                <span class="model-value" id="bench-val">${benchDefault} /1k</span>
+            </div>
+        </div>`;
+    } else {
+        setup = `<div class="model-setup-label">&#9881; Setup</div>
 
         <div class="section-header" style="margin-top:10px;">Coverage Threshold</div>
         <div class="${hasTT ? '' : 'model-disabled'}">
@@ -796,9 +932,11 @@ function renderModelTab() {
                 <span class="model-value" id="cov-thr-val">${defaultThr} min</span>
             </div>
         </div>`;
+    }
 
-    // ── Criterion weights with preset scenarios ──
-    html += `
+    // ── Setup: criterion weights with preset scenarios (EMS only) ──
+    if (!isHosp) {
+        setup += `
         <div class="section-header" style="margin-top:18px;">Criterion Weights</div>
         <div class="model-note">Choose a scenario — weights update automatically.</div>
         <div class="preset-btn-group">
@@ -809,8 +947,8 @@ function renderModelTab() {
         <div class="preset-notify" id="preset-notify"></div>
         <div class="model-weights-block">`;
 
-    CRITERIA_CONFIG.forEach((c, i) => {
-        html += `
+        CRITERIA_CONFIG.forEach((c, i) => {
+            setup += `
             <div class="model-weight-row">
                 <div class="model-weight-label-row">
                     <span class="filter-label" style="margin-bottom:0">${c.label}</span>
@@ -823,30 +961,39 @@ function renderModelTab() {
                         disabled style="opacity:0.5;pointer-events:none;">
                 </div>
             </div>`;
-    });
+        });
 
-    html += `
+        setup += `
             <div class="model-total-row">
                 <span>Effective share</span>
                 <span id="model-total-label" class="model-total-ok">100%</span>
             </div>
             <div class="weight-bar-container">`;
-    CRITERIA_CONFIG.forEach((c, i) => {
-        html += `<div class="weight-bar-seg" id="wbar-${c.id}" title="${c.label}" style="background:${_SEG_COLORS[i % _SEG_COLORS.length]}"></div>`;
-    });
-    html += `</div></div>`;
+        CRITERIA_CONFIG.forEach((c, i) => {
+            setup += `<div class="weight-bar-seg" id="wbar-${c.id}" title="${c.label}" style="background:${_SEG_COLORS[i % _SEG_COLORS.length]}"></div>`;
+        });
+        setup += `</div></div>`;
+    }
 
     // ── Reset + footer ──
-    html += `
+    if (isHosp) {
+        // Compact: reset is a small inline link, no footer note (results sit right below).
+        setup += `
+        <div class="model-compact-reset">
+            <a href="#" onclick="resetModelDefaults(); return false;">&#8635; Reset to defaults</a>
+        </div>`;
+    } else {
+        setup += `
         <div class="filter-group" style="margin-top:18px;">
             <button onclick="resetModelDefaults()" class="filter-reset-btn">&#8635; Reset to Defaults</button>
         </div>
         <div class="model-footer-note">
-            <strong>Updates live:</strong> sidebar ranking, score bars, priority counts, district colors on map.<br>
-            <strong>Requires re-run:</strong> grid heatmap layers &amp; coverage polygon.
+            <strong>Updates live:</strong> sidebar ranking, score bars, priority counts, district colors on map.<br><strong>Requires re-run:</strong> grid heatmap layers &amp; coverage polygon.
         </div>`;
+    }
 
-    panel.innerHTML = html;
+    // Hospitals: controls first → gap results below. EMS: results first → controls below.
+    panel.innerHTML = isHosp ? (setup + resultsBlock) : (resultsBlock + setup);
 
     recomputeAhpScores();
 }
@@ -922,6 +1069,8 @@ function resetModelDefaults() {
     const thrEl  = document.getElementById('coverage-threshold');
     const thrVal = document.getElementById('cov-thr-val');
     if (thrEl) { thrEl.value = defThr; if (thrVal) thrVal.textContent = defThr + ' min'; }
+    const bEl = document.getElementById('model-benchmark'), bVal = document.getElementById('bench-val');
+    if (bEl) { const bd = Math.round(_natAvgBeds() * 10) / 10; bEl.value = bd; if (bVal) bVal.textContent = bd + ' /1k'; }
     const hEl = document.getElementById('threshold-high'),   hVal = document.getElementById('threshold-high-val');
     const mEl = document.getElementById('threshold-medium'), mVal = document.getElementById('threshold-medium-val');
     if (hEl) { hEl.value = 20; if (hVal) hVal.textContent = '20%'; }
@@ -994,7 +1143,8 @@ function onDistrictCardClick(districtName) {
 
     const bounds = layer.getBounds();
     if (bounds.isValid()) map.fitBounds(bounds, { padding: [30, 30], maxZoom: 12 });
-    layer.setStyle({ fillOpacity: 0.6, opacity: 1, weight: 3 });
+    layer.setStyle({ fillOpacity: 0.6, opacity: 1, weight: 4, color: '#ffffff' });
+    if (layer._path) layer._path.style.filter = 'drop-shadow(0 0 6px #fff) drop-shadow(0 0 12px rgba(255,255,255,0.6))';
     layer.bringToFront();
     if (layer.openPopup) layer.openPopup();
     showSelectedDistrictCard(districtName);
@@ -1002,7 +1152,8 @@ function onDistrictCardClick(districtName) {
     highlightTimeout = setTimeout(() => {
         const filteredNames2 = new Set(getFilteredDistricts().map(d => d.district_name));
         const match = filteredNames2.has(districtName);
-        layer.setStyle(match ? { fillOpacity: 0.4, opacity: 0.8 } : { fillOpacity: 0.05, opacity: 0.15 });
+        layer.setStyle(match ? { fillOpacity: 0.4, opacity: 0.8, weight: 2, color: '#4a9eff' } : { fillOpacity: 0.05, opacity: 0.15, weight: 2, color: '#4a9eff' });
+        if (layer._path) layer._path.style.filter = '';
         highlightTimeout = null;
     }, 1200);
 }
@@ -1017,9 +1168,11 @@ function resetMapView() {
         Object.entries(districtLayersByName).forEach(([name, layer]) => {
             const match = filteredNames.has(name);
             if (layer.setStyle)
-                layer.setStyle(match ? { fillOpacity: 0.4, opacity: 0.8 } : { fillOpacity: 0.05, opacity: 0.15 });
-            if (layer._path)
+                layer.setStyle(match ? { fillOpacity: 0.4, opacity: 0.8, weight: 2, color: '#4a9eff' } : { fillOpacity: 0.05, opacity: 0.15, weight: 2, color: '#4a9eff' });
+            if (layer._path) {
                 layer._path.style.pointerEvents = match ? 'auto' : 'none';
+                layer._path.style.filter = '';
+            }
         });
     }
     document.getElementById('filtered-out-msg').style.display = 'none';
