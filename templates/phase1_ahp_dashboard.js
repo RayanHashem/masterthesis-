@@ -1057,6 +1057,8 @@ function applyPreset(presetName) {
     const preset = dsPresets[presetName];
     if (!preset) return;
 
+    _activePreset = presetName;
+
     // Update hidden slider values so recomputeAhpScores reads them
     CRITERIA_CONFIG.forEach(c => {
         const el = document.getElementById('weight-' + c.id);
@@ -1075,28 +1077,30 @@ function applyPreset(presetName) {
     const activeBtn = document.getElementById('preset-' + presetName);
     if (activeBtn) activeBtn.classList.add('preset-btn-active');
 
-    // Swap candidates to the preset's pre-computed set
-    if (typeof CANDIDATES_BY_PRESET !== 'undefined' && CANDIDATES_BY_PRESET[presetName]) {
-        CANDIDATES = CANDIDATES_BY_PRESET[presetName];
-    }
+    if (ACTIVE_DATASET !== 'hospitals') {
+        // Swap candidates to the preset's pre-computed set
+        if (typeof CANDIDATES_BY_PRESET !== 'undefined' && CANDIDATES_BY_PRESET[presetName]) {
+            CANDIDATES = CANDIDATES_BY_PRESET[presetName];
+        }
 
-    // Switching presets clears any explicit tier filter but preserves the
-    // "show all" view (the default), so all proposed stations stay visible.
-    _modelResultFilter = null;
+        // Switching presets clears any explicit tier filter but preserves the
+        // "show all" view (the default), so all proposed stations stay visible.
+        _modelResultFilter = null;
 
-    // Tally this preset's high-priority stations for the notification
-    classifyActiveCandidates();
-    const highCount = CANDIDATES.filter(c => c._priority === 'High').length;
+        // Tally this preset's high-priority stations for the notification
+        classifyActiveCandidates();
+        const highCount = CANDIDATES.filter(c => c._priority === 'High').length;
 
-    // Show notification
-    const notify = document.getElementById('preset-notify');
-    if (notify) {
-        const labels = { balanced: 'Balanced', access: 'Access Focus', population: 'Population Focus' };
-        notify.textContent = labels[presetName] + ' — ' + highCount +
-            ' high-priority station' + (highCount !== 1 ? 's' : '');
-        notify.classList.remove('preset-notify-fade');
-        void notify.offsetWidth; // force reflow
-        notify.classList.add('preset-notify-fade');
+        // Show notification
+        const notify = document.getElementById('preset-notify');
+        if (notify) {
+            const labels = { balanced: 'Balanced', access: 'Access Focus', population: 'Population Focus' };
+            notify.textContent = labels[presetName] + ' — ' + highCount +
+                ' high-priority station' + (highCount !== 1 ? 's' : '');
+            notify.classList.remove('preset-notify-fade');
+            void notify.offsetWidth; // force reflow
+            notify.classList.add('preset-notify-fade');
+        }
     }
 
     recomputeAhpScores();
