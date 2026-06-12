@@ -1077,7 +1077,7 @@ function applyPreset(presetName) {
     const activeBtn = document.getElementById('preset-' + presetName);
     if (activeBtn) activeBtn.classList.add('preset-btn-active');
 
-    if (ACTIVE_DATASET !== 'hospitals') {
+    if (ACTIVE_DATASET === 'ems') {
         // Swap candidates to the preset's pre-computed set
         if (typeof CANDIDATES_BY_PRESET !== 'undefined' && CANDIDATES_BY_PRESET[presetName]) {
             CANDIDATES = CANDIDATES_BY_PRESET[presetName];
@@ -1417,6 +1417,7 @@ function setActiveDataset(key) {
 
     // Reset hospital-specific UI state on every switch.
     hospitalTypeFilter = 'all';
+    _modelResultFilter = null;   // tier filter is EMS-specific; don't leak across datasets
     if (typeof hideHospitalDetail === 'function') hideHospitalDetail();
 
     // Re-render map + panels for the newly active dataset.
