@@ -1756,6 +1756,7 @@ datasets_obj = {
             'balanced':   {'access_gap': 0.30, 'pop_density': 0.30, 'exposed_pop': 0.25, 'bed_gap': 0.15},
             'access':     {'access_gap': 0.50, 'pop_density': 0.20, 'exposed_pop': 0.20, 'bed_gap': 0.10},
             'population': {'access_gap': 0.15, 'pop_density': 0.45, 'exposed_pop': 0.25, 'bed_gap': 0.15},
+            'capacity':   {'access_gap': 0.15, 'pop_density': 0.15, 'exposed_pop': 0.20, 'bed_gap': 0.50},
         },
     },
 }
