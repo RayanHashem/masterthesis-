@@ -672,6 +672,30 @@ _all_join = gpd.sjoin(hospitals_gdf.to_crs(hosp_districts.crs),
 _all_by_name = _all_join.groupby('NAME_2').size().to_dict()
 hosp_districts['total_hospitals'] = hosp_districts['NAME_2'].map(lambda n: int(_all_by_name.get(n, 0)))
 
+# Indicative demand centers: population-weighted centroid of the WorldPop
+# sample points inside each district (drives the "ghost" marker on the
+# hospital Recommended Interventions cards). Fallback: polygon centroid.
+_dc_by_name = {}
+try:
+    _dc_pts = gpd.sjoin(raster_gdf,
+                        hosp_districts[['NAME_2', 'geometry']].to_crs(raster_gdf.crs),
+                        how='inner', predicate='within')
+    for _nm, _grp in _dc_pts.groupby('NAME_2'):
+        _w = float(_grp['population'].sum())
+        if _w > 0:
+            _dc_by_name[_nm] = [
+                round(float((_grp.geometry.y * _grp['population']).sum() / _w), 5),
+                round(float((_grp.geometry.x * _grp['population']).sum() / _w), 5),
+            ]
+except Exception as _e:
+    print(f"  ⚠ Demand centers from raster failed ({_e}); using polygon centroids")
+for _, _row in hosp_districts.iterrows():
+    if _row['NAME_2'] not in _dc_by_name:
+        _c = _row.geometry.centroid
+        _dc_by_name[_row['NAME_2']] = [round(float(_c.y), 5), round(float(_c.x), 5)]
+hosp_districts['demand_center'] = hosp_districts['NAME_2'].map(_dc_by_name.get)
+print(f"  ✓ Demand centers: {len(_dc_by_name)} districts")
+
 # ── 3-lens equity diagnostic: capacity / access / affordability ──────────────
 # Capacity verdict = need_class (already computed). Access from travel time to
 # the nearest hospital. Affordability = does the district have a public hospital.
@@ -1566,6 +1590,7 @@ def build_hospital_districts_data(d):
             'total_hospitals': int(row.get('total_hospitals', 0)),
             'access_class': str(row.get('access_class', 'Good')),
             'afford_class': str(row.get('afford_class', 'public')),
+            'demand_center': row.get('demand_center') if isinstance(row.get('demand_center'), list) else None,
         })
     return out
 
@@ -1577,8 +1602,19 @@ def _clean_str(val):
         return ''
     return str(val).strip()
 
+# Map each hospital to its district (same join as the per-district counts)
+# so intervention cards can halo the right facilities client-side.
+_hosp_district_by_idx = {}
+try:
+    _hj = gpd.sjoin(hospitals_gdf.to_crs(hosp_districts.crs),
+                    hosp_districts[['NAME_2', 'geometry']], how='left', predicate='within')
+    _hj = _hj[~_hj.index.duplicated(keep='first')]
+    _hosp_district_by_idx = _hj['NAME_2'].fillna('').to_dict()
+except Exception as _e:
+    print(f"  ⚠ hospital→district join failed: {_e}")
+
 hospitals_supply = []
-for _, r in hospitals_df.iterrows():
+for _i, r in hospitals_df.iterrows():
     nm = _clean_str(r['name'])
     hospitals_supply.append({
         'lat': float(r['lat']), 'lon': float(r['lon']),
@@ -1587,6 +1623,7 @@ for _, r in hospitals_df.iterrows():
         'operator': _clean_str(r.get('operator', '')),
         'htype': _clean_str(r.get('hospital_type', '')) or 'private',
         'osrc': _clean_str(r.get('ownership_source', '')),
+        'district': _clean_str(_hosp_district_by_idx.get(_i, '')),
     })
 
 # Hospital proposals are deferred to a follow-up task (the grid/clustering
@@ -1654,7 +1691,7 @@ panel_html = f"""            <div class="panel-header">
                     <div id="ahp-ranking-table"></div>
 
                     <div style="display:flex;align-items:center;justify-content:space-between;margin-top:18px;margin-bottom:6px;">
-                        <div class="section-header" style="margin:0;">Recommended New Stations</div>
+                        <div class="section-header" style="margin:0;" id="actions-section-header">Recommended New Stations</div>
                         <select id="candidates-limit" class="filter-select" style="width:auto;padding:4px 8px;">
                             <option value="5">Top 5</option>
                             <option value="10" selected>Top 10</option>
