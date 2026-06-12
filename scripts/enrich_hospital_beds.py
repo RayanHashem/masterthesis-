@@ -88,6 +88,35 @@ ARABIC_BED_MATCHES = {
     '583705258': 234,   # قلب يسوع → Sacre Coeur
 }
 
+# Curated public/governmental-hospital bed counts (keyed by OSM id), value = (beds, source).
+# The Syndicate covers private hospitals only, so the 28 governmental hospitals would
+# otherwise all be median-imputed. These are the large/well-documented public hospitals,
+# each from an authoritative source:
+#   - moph-locator : MoPH Health Facility Locator per-department bed totals (registered beds)
+#   - wikipedia    : documented licensed/physical capacity (no MoPH per-dept figure published)
+# NOTE on metric: the moph-locator figures are MoPH-registered beds; RHUH uses documented
+# physical capacity (544 nominal; ~200 currently functional under the funding crisis — see
+# the operational-status caveat in PHASE2_NOTES). Smaller/undocumented governmental hospitals
+# (Baabda, Baalbek, Bint Jbeil, Military, ...) remain median-imputed and flagged.
+PUBLIC_BED_MATCHES = {
+    # RHUH: documented physical capacity (no MoPH per-dept figure published).
+    '993570500':  (544, 'wikipedia'),     # مستشفى الحريري الحكومي → Rafik Hariri Univ. Hospital
+    # The rest: full bed total (medicine+surgery+BGYN+pediatrics+ICU/CCU) read from the
+    # MoPH Health Facility Locator profile page (slug-resolved, June 2026).
+    '837909683':  (122, 'moph-locator'),  # Saida Governmental (27+23+29+35+8)
+    '1053701650': (100, 'moph-locator'),  # مستشفى النبطية الحكومي → Nabatieh (50+20+10+10+10)
+    '838327593':  (78,  'moph-locator'),  # Tripoli Governmental (15+15+19+24+5)
+    '842721483':  (59,  'moph-locator'),  # الياس الهراوي → Elias Hraoui, Zahle (39+3+9+0+8)
+    '1041902677': (32,  'moph-locator'),  # Bcharreh Governmental (18+12+1+1+0)
+    '836106045':  (55,  'moph-locator'),  # Dr Abdullah Al Rassi Governmental (19+0+18+18+0)
+    '1015151934': (55,  'moph-locator'),  # Hasbaya Governmental (19+8+2+22+4)
+    '844274432':  (20,  'moph-locator'),  # Jezzine Governmental (10+10+0+0+0)
+    '843152614':  (44,  'moph-locator'),  # Rachaya Governmental (37+0+2+2+3)
+    '943312183':  (57,  'moph-locator'),  # Sibline Governmental (12+18+6+14+7)
+    '1049394290': (38,  'moph-locator'),  # Sir Denniye Governmental (12+10+8+8+0)
+    '837390755':  (39,  'moph-locator'),  # Bouar = Ftouh Keserwan Governmental (8+18+7+2+4)
+}
+
 STOP = {'hospital','medical','center','centre','hopital','clinique','clinic',
         'university','of','the','de','el','al','la','st','saint'}
 
@@ -168,6 +197,16 @@ def main():
             r["beds"] = int(beds)
             r["beds_source"] = "syndicate-arabic"
             n_arabic += 1
+
+    # 2c) Curated public/governmental-hospital beds (keyed by OSM id) → real beds
+    n_public = 0
+    for r in osm:
+        match = PUBLIC_BED_MATCHES.get(str(r.get("osm_id", "")))
+        if match:
+            beds, src = match
+            r["beds"] = int(beds)
+            r["beds_source"] = f"public-{src}"
+            n_public += 1
 
     # 3) Hand-verified big hospitals: merge into nearby OSM point, else add new
     added = []
@@ -255,10 +294,30 @@ def main():
         for r in rows:
             w.writerow({k: r.get(k, "") for k in fields})
 
+    # Also export the FINAL points as GeoJSON (overwrites prepare_hospitals.py's raw
+    # intermediate) so data/lebanon_hospitals.geojson matches the enriched dataset.
+    feats = [{
+        "type": "Feature",
+        "geometry": {"type": "Point",
+                     "coordinates": [round(float(r["lon"]), 6), round(float(r["lat"]), 6)]},
+        "properties": {
+            "name": r["name"], "beds": int(r["beds"]),
+            "beds_estimated": bool(r["beds_estimated"]),
+            "beds_source": r.get("beds_source", ""),
+            "hospital_type": r.get("hospital_type", ""),
+            "ownership_source": r.get("ownership_source", ""),
+            "operator": r.get("operator", ""), "operator_type": r.get("operator_type", ""),
+            "osm_id": r.get("osm_id", ""), "geom_type": r.get("geom_type", "Point"),
+        },
+    } for r in rows]
+    with open(os.path.join(DATA_DIR, "lebanon_hospitals.geojson"), "w", encoding="utf-8") as fh:
+        json.dump({"type": "FeatureCollection", "features": feats}, fh, ensure_ascii=False)
+
     real = sum(1 for r in rows if not r["beds_estimated"])
     print(f"OK: {len(rows)} hospitals total")
     print(f"  name-matched (syndicate): {n_match}")
     print(f"  arabic-name matched: {n_arabic}")
+    print(f"  public-hospital matched (moph/wikipedia): {n_public}")
     print(f"  hand-verified added/merged: {len(VERIFIED_BIG)}  (new points: {len(added) - n_manual})")
     print(f"  manual-coords added: {n_manual}")
     print(f"  REAL bed counts now: {real} / {len(rows)}  (was 3)")

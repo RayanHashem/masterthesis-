@@ -27,14 +27,14 @@ Beirut General Hospital,33.872609,35.491963,100,True,median-estimate,private,inf
 مركز بلفو الطبي,33.848391,35.559505,150,False,syndicate-arabic,private,tagged,,,994902555,Polygon
 Dar El Rahmeh,33.878427,35.600165,300,False,syndicate-match,private,tagged,,,1043717503,Polygon
 Hôpital Haroun,33.900664,35.57178,95,False,syndicate-match,private,tagged,,,9591749608,Point
-Dr Abdullah Al Rassi Governmental Hospital,34.536097,36.088615,100,True,median-estimate,public,tagged,,,836106045,Polygon
+Dr Abdullah Al Rassi Governmental Hospital,34.536097,36.088615,55,False,public-moph-locator,public,tagged,,,836106045,Polygon
 عين وزين,33.680855,35.610768,137,False,syndicate-arabic,private,tagged,,,842359835,Polygon
 المستشفى الفرنسي سيدة لورد,33.869944,35.517786,100,True,median-estimate,private,inferred,,,387287439,Point
-Hasbaya Governmental Hospital,33.403483,35.689062,100,True,median-estimate,public,tagged,,,1015151934,Polygon
+Hasbaya Governmental Hospital,33.403483,35.689062,55,False,public-moph-locator,public,tagged,,,1015151934,Polygon
 مستشفى مرجعيون,33.363688,35.586962,100,True,median-estimate,private,inferred,,,762359189,Polygon
 El Youssef Hospital Center,34.543191,36.07472,120,False,syndicate-match,private,tagged,,,836104720,Polygon
-Sir Denniye Governmental Hospital,34.382435,36.008459,100,True,median-estimate,public,tagged,,public,1049394290,Polygon
-Bouar Governmental Hospital,34.045231,35.648571,100,True,median-estimate,public,tagged,,,837390755,Polygon
+Sir Denniye Governmental Hospital,34.382435,36.008459,38,False,public-moph-locator,public,tagged,,public,1049394290,Polygon
+Bouar Governmental Hospital,34.045231,35.648571,39,False,public-moph-locator,public,tagged,,,837390755,Polygon
 الشاب,33.558941,35.371467,100,True,median-estimate,private,inferred,,,583416785,Polygon
 مستشفى السلام - القبيات,34.567568,36.26162,100,True,median-estimate,private,inferred,,,838325732,Polygon
 Tamnine General Hospital,33.872146,35.998022,100,True,median-estimate,private,inferred,,,886725982,Polygon
@@ -47,7 +47,7 @@ Medical 2000 Hospital,33.803164,35.517294,100,True,median-estimate,private,infer
 مستشفى الصليب للأمراض العقلية والنفسية,33.901145,35.584712,907,False,syndicate-arabic,private,tagged,,,844266947,Polygon
 مستشفى الزهراء,33.863744,35.486937,200,False,syndicate-arabic,private,tagged,,,642515061,Polygon
 بيضون,33.893654,35.488982,100,True,median-estimate,private,inferred,,,387478377,Point
-مستشفى الحريري الحكومي,33.863239,35.491178,100,True,median-estimate,public,tagged,,,993570500,Polygon
+مستشفى الحريري الحكومي,33.863239,35.491178,544,False,public-wikipedia,public,tagged,,,993570500,Polygon
 Family Medical Center,34.424184,35.879656,100,True,median-estimate,private,inferred,,,1052112243,Polygon
 Mostawsef El Day3a,33.315138,35.521242,100,True,median-estimate,private,inferred,,,8009028966,Point
 Abou Jaoudeh Hospital,33.907416,35.581659,100,True,median-estimate,private,tagged,,private,1050031779,Polygon
@@ -59,7 +59,7 @@ Al-Maias Hospital,33.814205,35.853595,100,True,median-estimate,private,inferred,
 مستشفى سرحال,33.914989,35.608505,60,False,syndicate-arabic,private,tagged,,,4461868278,Point
 Saydet Zgharta Hospital,34.399652,35.88569,149,False,syndicate-match,private,tagged,,,2186083539,Point
 مستشفى الراعي,33.531653,35.362409,100,False,syndicate-arabic,private,tagged,,,4966703572,Point
-Tripoli Governmental Hospital,34.437506,35.859977,100,True,median-estimate,public,tagged,,public,838327593,Polygon
+Tripoli Governmental Hospital,34.437506,35.859977,78,False,public-moph-locator,public,tagged,,public,838327593,Polygon
 مستشفى الجعيتاوي,33.893896,35.530689,150,False,syndicate-arabic,private,tagged,,,284812334,Polygon
 Al Hamshari Hospital,33.547671,35.386261,100,True,median-estimate,private,inferred,,,9367879223,Point
 مركز كليمنصو الطبي,33.897506,35.489966,106,False,osm-tag,private,inferred,,,566103031,Polygon
@@ -89,7 +89,7 @@ CCCL,33.898956,35.484801,100,True,median-estimate,private,inferred,,,9213700291,
 مستشفى الناصرة,33.778251,35.907691,100,True,median-estimate,private,inferred,,,1043115528,Polygon
 Deir El Qamar Governmental Hospital,33.705129,35.57417,100,True,median-estimate,public,tagged,,,1136344912,Polygon
 El Hajj Hospital,33.98896,35.715161,10,False,syndicate-match,private,tagged,,,1041715172,Polygon
-مستشفى النبطية الحكومي,33.3896,35.482849,100,True,median-estimate,public,tagged,,,1053701650,Polygon
+مستشفى النبطية الحكومي,33.3896,35.482849,100,False,public-moph-locator,public,tagged,,,1053701650,Polygon
 Islamic Hospital,34.442374,35.832394,100,True,median-estimate,private,inferred,,,1052244722,Polygon
 مستشفى سان جورج,33.83701,35.527,100,True,median-estimate,private,inferred,,,311095794,Polygon
 Hôpital Borgi,34.298878,35.821775,35,False,syndicate-match,private,tagged,,,1043703184,Polygon
@@ -114,12 +114,12 @@ Kassab Hospital,33.568745,35.391633,47,False,syndicate-match,private,tagged,,,78
 al-rahmeh hospital,33.793633,35.87821,300,False,syndicate-match,private,tagged,,,7932090247,Point
 Al Hanan Hospital,34.443464,35.834269,35,False,syndicate-match,private,tagged,,,7824062502,Point
 Eye and Ear Hospital,33.926949,35.591478,50,False,syndicate-match,private,tagged,,,4907285125,Point
-Bcharreh Governmental Hospital,34.251023,36.016779,100,True,median-estimate,public,tagged,,,1041902677,Polygon
+Bcharreh Governmental Hospital,34.251023,36.016779,32,False,public-moph-locator,public,tagged,,,1041902677,Polygon
 Karantina Governmental Hospital,33.902537,35.53,100,True,median-estimate,public,tagged,,,7865407548,Point
 El Kheir Hospital,34.482505,35.940541,82,False,syndicate-match,private,tagged,,,7824042910,Point
 Tatari Hospital,34.010793,36.205755,35,False,syndicate-match,private,tagged,,,7875413039,Point
 مستشفى بحنس,33.905149,35.656312,78,False,syndicate-arabic,private,tagged,,,802992023,Polygon
-Saida Governmental Hospital,33.54605,35.381829,100,True,median-estimate,public,tagged,,,837909683,Polygon
+Saida Governmental Hospital,33.54605,35.381829,122,False,public-moph-locator,public,tagged,,,837909683,Polygon
 مستشفى سيدة المعونات جبيل,34.128162,35.658861,100,True,median-estimate,private,inferred,,,3854937270,Point
 مستشفى سان لويس جونية,33.993095,35.640727,65,False,syndicate-arabic,private,tagged,,,303946250,Polygon
 Taanayel General Hospital,33.794181,35.877756,100,True,median-estimate,private,inferred,,,7813286239,Point
@@ -144,14 +144,14 @@ Kharroubi Hospital,33.451894,35.286155,56,False,syndicate-match,private,tagged,K
 Al Assi Hospital,34.398305,36.406249,36,False,syndicate-match,private,tagged,,,94546142,Polygon
 Al Salam Hospital,34.4215,35.826841,177,False,syndicate-match,private,tagged,,,301703319,Polygon
 Saint Peter,33.254642,35.380339,100,True,median-estimate,private,inferred,,,770103343,Polygon
-Jezzine Governmental Hospital,33.538364,35.581234,100,True,median-estimate,public,tagged,,,844274432,Polygon
+Jezzine Governmental Hospital,33.538364,35.581234,20,False,public-moph-locator,public,tagged,,,844274432,Polygon
 طراد,33.896955,35.491837,71,False,osm-tag,private,inferred,,,585187512,Polygon
 Baakline Medical Center,33.678574,35.574528,100,True,median-estimate,private,inferred,,,798537077,Polygon
 Sahel General Hospital,33.857884,35.503586,152,False,syndicate-match,private,tagged,,,1052512174,Polygon
 Lebanon Heart Hospital,34.418869,35.828728,100,True,median-estimate,private,inferred,,,2910404163,Point
 Sidon Turkish Trauma and Rehabilitation Hospital,33.582896,35.387749,100,True,median-estimate,private,inferred,,,976693718,Polygon
 Hôpital Notre Dame du Liban,33.981839,35.627705,140,False,syndicate-match,private,tagged,,,475308923,Polygon
-مستشفى رئيس الياس الهراوي الحكومي,33.841154,35.916323,100,True,median-estimate,public,tagged,,,842721483,Polygon
+مستشفى رئيس الياس الهراوي الحكومي,33.841154,35.916323,59,False,public-moph-locator,public,tagged,,,842721483,Polygon
 نجار,33.896778,35.486759,53,False,osm-tag,private,inferred,,,512476202,Point
 مستشفى غندور,33.365134,35.493159,100,True,median-estimate,private,inferred,,,891216041,Polygon
 مستشفى تبنين,33.196912,35.415446,100,True,median-estimate,private,inferred,,,837156782,Polygon
@@ -161,7 +161,7 @@ Hiram Hospital,33.281818,35.22261,90,False,syndicate-match,private,tagged,,,1012
 Hamed Farhat Hospital,33.629968,35.803742,84,False,syndicate-match,private,tagged,,,682712730,Polygon
 Al Hayat Hospital,33.857884,35.525178,120,False,syndicate-match,private,tagged,,,9703619234,Point
 Akkar Rahal Hospital,34.549967,36.078963,100,False,syndicate-match,private,tagged,,private,836107076,Polygon
-Rachaya Governmental Hospital,33.509611,35.826953,100,True,median-estimate,public,tagged,,,843152614,Polygon
+Rachaya Governmental Hospital,33.509611,35.826953,44,False,public-moph-locator,public,tagged,,,843152614,Polygon
 Qana Governmental Hospital,33.215184,35.291737,100,True,median-estimate,public,tagged,,public,1019828085,Polygon
 Centre Médical Libano-Canadien,33.866451,35.523832,100,False,syndicate-match,private,tagged,,,6775119697,Point
 مركز الشرق الاوسط الصحي الجامعي,33.904453,35.597413,200,False,syndicate-arabic,private,tagged,,,445619060,Polygon
@@ -175,5 +175,6 @@ Nakib Hospital,33.566386,35.38983,100,True,median-estimate,private,tagged,Trace,
 Hôpital Libano-Français,33.833435,35.9125,132,False,syndicate-match,private,tagged,,,3094233276,Point
 Hariri Medical Center Taanayel,33.782518,35.888557,100,True,median-estimate,private,inferred,,,837165388,Polygon
 دلاعة,33.557155,35.37747,100,False,syndicate-arabic,private,tagged,,,386795333,Point
-Sibline Governmental Hospital,33.617152,35.43355,100,True,median-estimate,public,tagged,,,943312183,Polygon
+Sibline Governmental Hospital,33.617152,35.43355,57,False,public-moph-locator,public,tagged,,,943312183,Polygon
 مستشفى النيني,34.435415,35.830454,128,False,syndicate-arabic,private,tagged,,,1857670915,Point
+Saideh Hospital,33.910062,35.587414,600,False,manual,private,inferred,,,,Point
