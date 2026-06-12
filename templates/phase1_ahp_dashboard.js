@@ -16,6 +16,8 @@ let map = null;
 let districtLayersByName = {};
 let highlightTimeout = null;
 let _activePreset = 'balanced';   // active weight preset; null = user-customized
+let _ghostMarker = null;      // indicative demand-center circle (hospitals)
+let _haloHospitals = [];      // hospitals currently haloed by an intervention card
 let candidateHighlightCircle = null;
 let candidatesLayer = null;       // direct ref to the Folium FeatureGroup
 let candidatesVisible = true;     // tracks current state
@@ -450,6 +452,7 @@ function refreshSupplyLayer() {
                 }),
             });
             m.on('click', () => showHospitalDetail(s));
+            s._mRef = m;
         } else {
             m = L.circleMarker([s.lat, s.lon], {
                 pane: 'supplyPane',
@@ -811,7 +814,7 @@ function renderHospitalGapResults(el) {
 function renderModelResults() {
     const el = document.getElementById('model-results-section');
     if (!el) return;
-    if (ACTIVE_DATASET === 'hospitals') { renderHospitalGapResults(el); return; }
+    if (ACTIVE_DATASET === 'hospitals') { renderHospitalGapResults(el); renderInterventions(); return; }
 
     const candidates = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
 
@@ -873,7 +876,7 @@ function _toggleModelFilter(priority) {
     renderModelResults();
     // Keep the map pins and Analysis list in sync with the selected tier.
     updateCandidateMarkers();
-    renderCandidates();
+    renderActionsSection();
 }
 
 /** Toggles showing every proposed station on the map/list, regardless of tier. */
@@ -882,7 +885,7 @@ function _toggleShowAllProposed() {
     if (_showAllProposed) _modelResultFilter = null;   // "all" overrides any tier filter
     renderModelResults();
     updateCandidateMarkers();
-    renderCandidates();
+    renderActionsSection();
 }
 
 /** Renders the full Model tab content from CRITERIA_CONFIG. */
@@ -902,6 +905,128 @@ function _getThreshold() {
     const el = document.getElementById('coverage-threshold');
     return el ? parseFloat(el.value)
               : (typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 30);
+}
+
+// ── RECOMMENDED INTERVENTIONS (hospitals' counterpart of proposed stations) ──
+const _GAP_CHIP   = { capacity: 'capacity', no_public: 'no public', access: 'access' };
+const _GAP_ACTION = {
+    capacity:  'Expand bed capacity at existing facilities',
+    no_public: 'Add public or contracted-affordable capacity',
+    access:    'Operational / transport support',
+};
+
+/** Pure read: districts with ≥1 gap vs the live benchmark/threshold, worst first. */
+function computeInterventions() {
+    const bench = _getBenchmark();
+    const thr   = _getThreshold();
+    const out = [];
+    DISTRICTS.forEach(d => {
+        const gaps = [];
+        const pop = d.population || 0;
+        const bpk = d.beds_per_1000 || 0;
+        let bedsShort = 0;
+        if (bpk < bench) { bedsShort = (bench - bpk) * pop / 1000; gaps.push('capacity'); }
+        if ((d.public_hospitals || 0) === 0) gaps.push('no_public');
+        const tt = d.min_travel_time_min;
+        if (tt !== null && tt !== undefined && tt > thr) gaps.push('access');
+        if (gaps.length) out.push({ d, gaps, bedsShort, pop });
+    });
+    out.sort((a, b) => (b.d.ahp_score || 0) - (a.d.ahp_score || 0));
+    return out;
+}
+
+function renderInterventions() {
+    const listEl = document.getElementById('candidates-list');
+    if (!listEl) return;
+    const items    = computeInterventions();
+    const limitEl  = document.getElementById('candidates-limit');
+    const limitVal = limitEl ? limitEl.value : '10';
+    const n        = limitVal === 'all' ? items.length : Math.min(items.length, parseInt(limitVal, 10) || 10);
+    const bench = _getBenchmark(), thr = _getThreshold();
+
+    if (items.length === 0) {
+        listEl.innerHTML = `<div class="empty-section">&#10003; No gaps at the current benchmark (${bench}/1k) and threshold (${thr} min)</div>`;
+        return;
+    }
+    const intro = `<div class="decision-standards-card">
+        <b>No new-hospital pins by design:</b> Lebanon's hospital gap is distribution &amp; affordability, not raw count.
+        Each card names the gap and the honest intervention; click it to fly to the district, see an
+        <i>indicative demand center</i> (dashed circle — where the affected population concentrates, not a site
+        proposal), and the existing facilities the intervention would run through.</div>`;
+    listEl.innerHTML = intro + items.slice(0, n).map((it, i) => {
+        const dn = it.d.district_name;
+        const chips = it.gaps.map(g => `<span class="iv-chip iv-${g}">${_GAP_CHIP[g]}</span>`).join('');
+        const magParts = [];
+        if (it.gaps.includes('capacity'))  magParts.push(`&#8776;${formatNum(Math.round(it.bedsShort))} beds short of ${bench}/1k`);
+        if (it.gaps.includes('no_public')) magParts.push(`${formatNum(it.pop)} people, 0 public hospitals`);
+        if (it.gaps.includes('access'))    magParts.push(`&gt;${thr} min to nearest hospital`);
+        const actions = it.gaps.map(g => _GAP_ACTION[g]).join(' &middot; ');
+        return `<div class="candidate-card iv-card" onclick="onInterventionClick('${esc(dn)}')">
+            <div class="candidate-card-top">
+                <span class="candidate-rank-badge">#${i + 1}</span>
+                <b class="iv-district">${dn}</b>
+                ${chips}
+            </div>
+            <div class="candidate-card-meta">${magParts.map(m => `<span class="candidate-metric">${m}</span>`).join('')}</div>
+            <div class="iv-action">&#8594; ${actions}</div>
+        </div>`;
+    }).join('');
+}
+
+/** Removes the ghost demand-center marker and any facility halos. */
+function clearInterventionMapArtifacts() {
+    if (_ghostMarker && map) map.removeLayer(_ghostMarker);
+    _ghostMarker = null;
+    _haloHospitals.forEach(s => {
+        const el = s._mRef && s._mRef.getElement && s._mRef.getElement();
+        const badge = el && el.querySelector('.hosp-marker');
+        if (badge) badge.classList.remove('hosp-halo', 'hosp-halo-strong');
+    });
+    _haloHospitals = [];
+}
+
+/** Intervention card click: fly to district + ghost demand center + facility halos. */
+function onInterventionClick(districtName) {
+    clearInterventionMapArtifacts();
+    onDistrictCardClick(districtName);
+    const d = DISTRICTS.find(x => x.district_name === districtName);
+    if (!d || !map) return;
+
+    if (Array.isArray(d.demand_center) && d.demand_center.length === 2) {
+        _ghostMarker = L.circleMarker([d.demand_center[0], d.demand_center[1]], {
+            pane: 'supplyPane',
+            radius: 14, color: '#ffffff', weight: 2, dashArray: '4 4',
+            fillColor: '#ffffff', fillOpacity: 0.12,
+        }).addTo(map);
+        _ghostMarker.bindTooltip('Indicative demand center — not a site proposal', { direction: 'top' });
+    }
+
+    // Affordability-only gap → halo private hospitals (contracting candidates);
+    // otherwise halo all of the district's hospitals (public emphasized).
+    const it = computeInterventions().find(x => x.d.district_name === districtName);
+    const privateOnly = !!it && it.gaps.includes('no_public') && !it.gaps.includes('capacity');
+    (STATIONS || []).forEach(s => {
+        if (s.district !== districtName) return;
+        if (privateOnly && s.htype === 'public') return;
+        const el = s._mRef && s._mRef.getElement && s._mRef.getElement();
+        const badge = el && el.querySelector('.hosp-marker');
+        if (badge) {
+            badge.classList.add(s.htype === 'public' ? 'hosp-halo-strong' : 'hosp-halo');
+            _haloHospitals.push(s);
+        }
+    });
+}
+
+/** Dataset dispatcher for the Analysis tab's bottom section. */
+function renderActionsSection() {
+    const header = document.getElementById('actions-section-header');
+    if (ACTIVE_DATASET === 'hospitals') {
+        if (header) header.textContent = 'Recommended Interventions';
+        renderInterventions();
+    } else {
+        if (header) header.textContent = 'Recommended New Stations';
+        renderCandidates();
+    }
 }
 
 function renderModelTab() {
@@ -1043,7 +1168,7 @@ function applyPreset(presetName) {
     }
 
     recomputeAhpScores();
-    renderCandidates();
+    renderActionsSection();
     updateCandidateMarkers();
 }
 
@@ -1090,7 +1215,7 @@ function applyFilters() {
 
     renderAhpSummary();
     renderAhpRanking(filtered);
-    renderCandidates();
+    renderActionsSection();
 
     if (map && districtLayersByName) {
         Object.entries(districtLayersByName).forEach(([name, layer]) => {
@@ -1150,6 +1275,7 @@ function onDistrictCardClick(districtName) {
 function resetMapView() {
     if (highlightTimeout) { clearTimeout(highlightTimeout); highlightTimeout = null; }
     hideSelectedDistrictCard();
+    clearInterventionMapArtifacts();
     if (map) {
         map.fitBounds(LEBANON_BOUNDS);
         const filteredNames = new Set(getFilteredDistricts().map(d => d.district_name));
@@ -1358,6 +1484,7 @@ function setActiveDataset(key) {
     hospitalTypeFilter = 'all';
     _modelResultFilter = null;   // tier filter is EMS-specific; don't leak across datasets
     if (typeof hideHospitalDetail === 'function') hideHospitalDetail();
+    if (typeof clearInterventionMapArtifacts === 'function') clearInterventionMapArtifacts();
 
     // Re-render map + panels for the newly active dataset.
     if (typeof refreshSupplyLayer === 'function') refreshSupplyLayer(); // defined in a later task
@@ -1374,7 +1501,7 @@ function setActiveDataset(key) {
         renderAhpSummary(f);
         if (typeof renderAhpRanking === 'function') renderAhpRanking(f);
     }
-    if (typeof renderCandidates === 'function') renderCandidates();
+    if (typeof renderActionsSection === 'function') renderActionsSection();
 }
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
@@ -1401,7 +1528,7 @@ function initFilters() {
 
     // Candidates limit
     const candidatesLimit = document.getElementById('candidates-limit');
-    if (candidatesLimit) candidatesLimit.addEventListener('change', renderCandidates);
+    if (candidatesLimit) candidatesLimit.addEventListener('change', renderActionsSection);
 
     // Floating candidates toggle button
     const toggleBtn2 = document.getElementById('candidates-map-toggle');
@@ -1426,7 +1553,7 @@ function initFilters() {
     renderModelTab();
     renderFiltersTab();
     applyFilters();
-    renderCandidates();
+    renderActionsSection();
 }
 
 document.addEventListener('DOMContentLoaded', initFilters);
