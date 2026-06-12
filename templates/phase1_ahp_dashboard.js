@@ -578,7 +578,6 @@ function hideSelectedDistrictCard() {
 
 // ── LIVE MODEL ────────────────────────────────────────────────────────────────
 
-const _SEG_COLORS = ['#ffffff', '#b5b5b5', '#6e6e6e', '#d8d8d8', '#8a8a8a'];
 const _PRIORITY_FILL   = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
 let _modelResultFilter = null; // null = show top 5 all; 'High'/'Medium'/'Low' = filter
 let _showAllProposed   = true;  // default: show every proposed station regardless of tier
@@ -686,34 +685,31 @@ function updateMapDistrictColors() {
     });
 }
 
-/** Updates the percentage labels and stacked bar in the Model tab. */
+/** Updates the percentage labels and the formula line in the Model tab. */
 function _updateWeightDisplay(normW) {
-    CRITERIA_CONFIG.forEach((c, i) => {
-        const pct   = Math.round((normW[c.id] || 0) * 100);
+    CRITERIA_CONFIG.forEach(c => {
         const pctEl = document.getElementById('pct-' + c.id);
-        if (pctEl) pctEl.textContent = pct + '%';
-        const segEl = document.getElementById('wbar-' + c.id);
-        if (segEl) { segEl.style.width = pct + '%'; segEl.style.background = _SEG_COLORS[i % _SEG_COLORS.length]; }
+        if (pctEl) pctEl.textContent = Math.round((normW[c.id] || 0) * 100) + '%';
     });
-    _updateHospFormulaLine(normW);
+    _updateFormulaLine(normW);
 }
 
 /** Plain-word names for the formula line. */
 const _FORMULA_WORDS = { access_gap: 'travel', pop_density: 'density', exposed_pop: 'exposure', bed_gap: 'beds' };
 const _PRESET_LABELS = { balanced: 'Balanced', access: 'Access', population: 'Population', capacity: 'Capacity' };
 
-/** Updates the hospital formula line + preset chip (no-op when not rendered, e.g. EMS). */
-function _updateHospFormulaLine(normW) {
-    const pctsEl = document.getElementById('hosp-formula-pcts');
+/** Updates the formula line + preset chip in the Model tab's setup card. */
+function _updateFormulaLine(normW) {
+    const pctsEl = document.getElementById('model-formula-pcts');
     if (!pctsEl) return;
     pctsEl.innerHTML = CRITERIA_CONFIG.map(c =>
         `<b>${Math.round((normW[c.id] || 0) * 100)}% ${_FORMULA_WORDS[c.id] || c.id}</b>`).join(' &middot; ');
-    const chipEl = document.getElementById('hosp-formula-chip');
+    const chipEl = document.getElementById('model-formula-chip');
     if (chipEl) chipEl.textContent = _activePreset ? (_PRESET_LABELS[_activePreset] || _activePreset) : 'Custom';
 }
 
 /** A weight slider was moved by hand: preset becomes Custom, everything recomputes. */
-function onHospWeightInput() {
+function onWeightInput() {
     _activePreset = null;
     document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('preset-btn-active'));
     recomputeAhpScores();
@@ -919,126 +915,69 @@ function renderModelTab() {
 
     const resultsBlock = `<div class="model-results-section" id="model-results-section"></div>`;
 
-    // ── Setup: coverage threshold ──
-    let setup;
-    if (isHosp) {
-        // Compact one-row-per-control layout so the gap results stay above the fold.
-        const benchDefault = Math.round(_natAvgBeds() * 10) / 10;
-        setup = `<div class="model-setup-label">&#9881; Setup</div>
+    // Compact "settings → results" card, shared by both datasets: one row per
+    // control, formula line, collapsed weights expander, results below.
+    const dsPresets  = (DATASETS[ACTIVE_DATASET] && DATASETS[ACTIVE_DATASET].presets) || WEIGHT_PRESETS;
+    const presetBtns = Object.keys(dsPresets).map(p =>
+        `<button class="preset-btn${p === 'balanced' ? ' preset-btn-active' : ''}" id="preset-${p}" onclick="applyPreset('${p}')">${_PRESET_LABELS[p] || p}</button>`
+    ).join('');
+
+    let setup = `<div class="model-setup-label">&#9881; Setup</div>
         <div class="model-compact-controls ${hasTT ? '' : 'model-disabled'}">
             ${!hasTT ? '<div class="model-note">&#9888; Re-run the Python script to enable live threshold control.</div>' : ''}
-            <div class="model-compact-row" title="Districts are &quot;exposed&quot; if travel time to nearest hospital exceeds this value.">
+            <div class="model-compact-row" title="Districts are &quot;exposed&quot; if travel time to nearest ${supplyWord} exceeds this value.">
                 <span class="model-compact-label">Coverage Threshold</span>
                 <input type="range" id="coverage-threshold" class="filter-slider"
                     min="5" max="60" step="5" value="${defaultThr}"
                     oninput="document.getElementById('cov-thr-val').textContent=this.value+' min'; recomputeAhpScores()">
                 <span class="model-value" id="cov-thr-val">${defaultThr} min</span>
-            </div>
+            </div>`;
+
+    if (isHosp) {
+        const benchDefault = Math.round(_natAvgBeds() * 10) / 10;
+        setup += `
             <div class="model-compact-row" title="Districts below this beds-per-1,000 level are &quot;under-capacity&quot;. Default = national average.">
                 <span class="model-compact-label">Capacity Benchmark</span>
                 <input type="range" id="model-benchmark" class="filter-slider"
                     min="1" max="6" step="0.1" value="${benchDefault}"
                     oninput="document.getElementById('bench-val').textContent=this.value+' /1k'; renderModelResults()">
                 <span class="model-value" id="bench-val">${benchDefault} /1k</span>
-            </div>
+            </div>`;
+    }
+
+    setup += `
             <div class="model-formula-row" title="How the Overall-priority score is weighted. Expand below to change it.">
-                <span class="model-formula-text">Priority formula: <span id="hosp-formula-pcts">&mdash;</span></span>
-                <span class="model-formula-chip" id="hosp-formula-chip">Balanced</span>
+                <span class="model-formula-text">Priority formula: <span id="model-formula-pcts">&mdash;</span></span>
+                <span class="model-formula-chip" id="model-formula-chip">Balanced</span>
             </div>
             <details class="model-weights-details">
                 <summary>Customize weights</summary>
                 <div class="preset-btn-group" style="margin-top:8px;">
-                    <button class="preset-btn preset-btn-active" id="preset-balanced" onclick="applyPreset('balanced')">Balanced</button>
-                    <button class="preset-btn" id="preset-access" onclick="applyPreset('access')">Access</button>
-                    <button class="preset-btn" id="preset-population" onclick="applyPreset('population')">Population</button>
-                    <button class="preset-btn" id="preset-capacity" onclick="applyPreset('capacity')">Capacity</button>
+                    ${presetBtns}
                 </div>
+                ${isHosp ? '' : '<div class="preset-notify" id="preset-notify"></div>'}
                 ${CRITERIA_CONFIG.map(c => `
                 <div class="model-compact-row" title="${c.description.replace(/"/g, '&quot;')}">
                     <span class="model-compact-label">${c.label}</span>
                     <input type="range" class="filter-slider" id="weight-${c.id}"
                         min="0" max="1" step="0.05" value="${c.weight}"
-                        oninput="onHospWeightInput()">
+                        oninput="onWeightInput()">
                     <span class="model-pct" id="pct-${c.id}">&mdash;</span>
                 </div>`).join('')}
             </details>
-        </div>`;
-    } else {
-        setup = `<div class="model-setup-label">&#9881; Setup</div>
-
-        <div class="section-header" style="margin-top:10px;">Coverage Threshold</div>
-        <div class="${hasTT ? '' : 'model-disabled'}">
-            <div class="model-desc">Districts are "exposed" if travel time to nearest ${supplyWord} exceeds this value.</div>
-            ${!hasTT ? '<div class="model-note">&#9888; Re-run the Python script to enable live threshold control.</div>' : ''}
-            <div class="model-slider-row">
-                <input type="range" id="coverage-threshold" class="filter-slider"
-                    min="5" max="60" step="5" value="${defaultThr}"
-                    oninput="document.getElementById('cov-thr-val').textContent=this.value+' min'; recomputeAhpScores()">
-                <span class="model-value" id="cov-thr-val">${defaultThr} min</span>
-            </div>
-        </div>`;
-    }
-
-    // ── Setup: criterion weights with preset scenarios (EMS only) ──
-    if (!isHosp) {
-        setup += `
-        <div class="section-header" style="margin-top:18px;">Criterion Weights</div>
-        <div class="model-note">Choose a scenario — weights update automatically.</div>
-        <div class="preset-btn-group">
-            <button class="preset-btn preset-btn-active" id="preset-balanced" onclick="applyPreset('balanced')">Balanced</button>
-            <button class="preset-btn" id="preset-access" onclick="applyPreset('access')">Access Focus</button>
-            <button class="preset-btn" id="preset-population" onclick="applyPreset('population')">Population Focus</button>
         </div>
-        <div class="preset-notify" id="preset-notify"></div>
-        <div class="model-weights-block">`;
-
-        CRITERIA_CONFIG.forEach((c, i) => {
-            setup += `
-            <div class="model-weight-row">
-                <div class="model-weight-label-row">
-                    <span class="filter-label" style="margin-bottom:0">${c.label}</span>
-                    <span class="model-pct" id="pct-${c.id}">—</span>
-                </div>
-                <div class="model-desc">${c.description}</div>
-                <div class="model-slider-row">
-                    <input type="range" class="filter-slider" id="weight-${c.id}"
-                        min="0" max="1" step="0.05" value="${c.weight}"
-                        disabled style="opacity:0.5;pointer-events:none;">
-                </div>
-            </div>`;
-        });
-
-        setup += `
-            <div class="model-total-row">
-                <span>Effective share</span>
-                <span id="model-total-label" class="model-total-ok">100%</span>
-            </div>
-            <div class="weight-bar-container">`;
-        CRITERIA_CONFIG.forEach((c, i) => {
-            setup += `<div class="weight-bar-seg" id="wbar-${c.id}" title="${c.label}" style="background:${_SEG_COLORS[i % _SEG_COLORS.length]}"></div>`;
-        });
-        setup += `</div></div>`;
-    }
-
-    // ── Reset + footer ──
-    if (isHosp) {
-        // Compact: reset is a small inline link, no footer note (results sit right below).
-        setup += `
         <div class="model-compact-reset">
             <a href="#" onclick="resetModelDefaults(); return false;">&#8635; Reset to defaults</a>
         </div>`;
-    } else {
+
+    if (!isHosp) {
         setup += `
-        <div class="filter-group" style="margin-top:18px;">
-            <button onclick="resetModelDefaults()" class="filter-reset-btn">&#8635; Reset to Defaults</button>
-        </div>
         <div class="model-footer-note">
             <strong>Updates live:</strong> sidebar ranking, score bars, priority counts, district colors on map.<br><strong>Requires re-run:</strong> grid heatmap layers &amp; coverage polygon.
         </div>`;
     }
 
-    // Hospitals: controls first → gap results below. EMS: results first → controls below.
-    panel.innerHTML = isHosp ? (setup + resultsBlock) : (resultsBlock + setup);
+    panel.innerHTML = setup + resultsBlock;
 
     recomputeAhpScores();
 }
