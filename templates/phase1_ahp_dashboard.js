@@ -15,6 +15,7 @@ let DEFAULT_COVERAGE_THRESHOLD = DATASETS[ACTIVE_DATASET].threshold;
 let map = null;
 let districtLayersByName = {};
 let highlightTimeout = null;
+let _activePreset = 'balanced';   // active weight preset; null = user-customized
 let candidateHighlightCircle = null;
 let candidatesLayer = null;       // direct ref to the Folium FeatureGroup
 let candidatesVisible = true;     // tracks current state
@@ -892,6 +893,7 @@ function renderModelTab() {
     const hasTT      = DISTRICTS.length > 0 && DISTRICTS[0].min_travel_time_min !== null && DISTRICTS[0].min_travel_time_min !== undefined;
     const defaultThr = typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 10;
     const supplyWord = isHosp ? 'hospital' : 'station';
+    _activePreset = 'balanced';   // fresh render always starts at defaults
 
     const resultsBlock = `<div class="model-results-section" id="model-results-section"></div>`;
 
@@ -917,6 +919,27 @@ function renderModelTab() {
                     oninput="document.getElementById('bench-val').textContent=this.value+' /1k'; renderModelResults()">
                 <span class="model-value" id="bench-val">${benchDefault} /1k</span>
             </div>
+            <div class="model-formula-row" title="How the Overall-priority score is weighted. Expand below to change it.">
+                <span class="model-formula-text">Priority formula: <span id="hosp-formula-pcts">&mdash;</span></span>
+                <span class="model-formula-chip" id="hosp-formula-chip">Balanced</span>
+            </div>
+            <details class="model-weights-details">
+                <summary>Customize weights</summary>
+                <div class="preset-btn-group" style="margin-top:8px;">
+                    <button class="preset-btn preset-btn-active" id="preset-balanced" onclick="applyPreset('balanced')">Balanced</button>
+                    <button class="preset-btn" id="preset-access" onclick="applyPreset('access')">Access</button>
+                    <button class="preset-btn" id="preset-population" onclick="applyPreset('population')">Population</button>
+                    <button class="preset-btn" id="preset-capacity" onclick="applyPreset('capacity')">Capacity</button>
+                </div>
+                ${CRITERIA_CONFIG.map(c => `
+                <div class="model-compact-row" title="${c.description.replace(/"/g, '&quot;')}">
+                    <span class="model-compact-label">${c.label}</span>
+                    <input type="range" class="filter-slider" id="weight-${c.id}"
+                        min="0" max="1" step="0.05" value="${c.weight}"
+                        oninput="onHospWeightInput()">
+                    <span class="model-pct" id="pct-${c.id}">&mdash;</span>
+                </div>`).join('')}
+            </details>
         </div>`;
     } else {
         setup = `<div class="model-setup-label">&#9881; Setup</div>
