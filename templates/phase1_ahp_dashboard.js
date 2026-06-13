@@ -27,6 +27,11 @@ function formatNum(n) {
     return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
+/** Escapes a string for safe use inside a single-quoted inline onclick handler. */
+function escJs(s) {
+    return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
+}
+
 // ── TABS ──────────────────────────────────────────────────────────────────────
 function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b =>
@@ -750,10 +755,9 @@ function computeHospitalGaps() {
 function renderHospitalGapResults(el) {
     const g   = computeHospitalGaps();
     const fmt = n => Math.round(n).toLocaleString('en-US');
-    const esc = s => String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
     const list = (districts, metricFn, n = 5) =>
         districts.slice(0, n).map(d =>
-            `<div class="gap-dist-row" onclick="onDistrictCardClick('${esc(d.district_name)}')">
+            `<div class="gap-dist-row" onclick="onDistrictCardClick('${escJs(d.district_name)}')">
                 <span class="gap-dist-name">${d.district_name}</span>
                 <span class="gap-dist-metric">${metricFn(d)}</span>
             </div>`).join('') || '<div class="gap-dist-empty">None — no gap on this lens.</div>';
@@ -961,7 +965,7 @@ function renderInterventions() {
         if (it.gaps.includes('no_public')) magParts.push(`${formatNum(it.pop)} people, 0 public hospitals`);
         if (it.gaps.includes('access'))    magParts.push(`&gt;${thr} min to nearest hospital`);
         const actions = it.gaps.map(g => _GAP_ACTION[g]).join(' &middot; ');
-        return `<div class="candidate-card iv-card" onclick="onInterventionClick('${esc(dn)}')">
+        return `<div class="candidate-card iv-card" onclick="onInterventionClick('${escJs(dn)}')">
             <div class="candidate-card-top">
                 <span class="candidate-rank-badge">#${i + 1}</span>
                 <b class="iv-district">${dn}</b>
@@ -1554,6 +1558,11 @@ function initFilters() {
     renderFiltersTab();
     applyFilters();
     renderActionsSection();
+
+    // Browsers restore <select> state across reloads, but ACTIVE_DATASET resets
+    // to 'ems' and no change event fires — leaving the dropdown showing one
+    // dataset while the panels render another. Honor the dropdown's actual value.
+    if (dsSel && dsSel.value && dsSel.value !== ACTIVE_DATASET) setActiveDataset(dsSel.value);
 }
 
 document.addEventListener('DOMContentLoaded', initFilters);
