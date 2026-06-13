@@ -145,6 +145,21 @@ every step against a regression baseline).
   hospital? → Public ✓ / No public). Worst-served first; click a row for the full
   district profile. Summary cards: Hospitals / Public Hospitals / Need Capacity /
   No Public Hospital.
+  - **Recommended Interventions** (June 2026 — replaces the EMS "Recommended New
+    Stations" section for hospitals; spec:
+    `docs/superpowers/specs/2026-06-12-hospital-interventions-design.md`). The honest
+    counterpart of EMS "build-here" pins: one card per gap district (worst-first by
+    live AHP score), tagged with gap chips (`capacity` / `no public` / `access`),
+    the magnitude (beds short, people with no public hospital, minutes beyond
+    threshold), and the matching action ("expand existing capacity" / "add
+    public/contracted-affordable capacity" / "operational + transport support").
+    Cards recompute live with the Model-tab benchmark/threshold (`computeInterventions()`).
+    **Clicking a card** flies to the district (white-glow boundary) and drops an
+    **indicative demand-center ghost marker** (dashed translucent circle at the
+    population-weighted centroid of the district's WorldPop cells — labelled *"not a
+    site proposal"*) plus **halos the relevant existing hospitals** (capacity gap →
+    all, public emphasized; affordability-only gap → private hospitals as contracting
+    candidates). Reset Map / dataset switch clears the ghost + halos.
 - **Model** — *redesigned for hospitals* (June 2026, spec:
   `docs/superpowers/specs/2026-06-10-hospital-model-tab-design.md`). A **"settings →
   gap"** tab: controls on top, results below.
@@ -162,6 +177,15 @@ every step against a regression baseline).
        counts (driven by the weights).
   - All client-side (no Python re-run). The old EMS "proposed stations" results are
     **only shown for EMS**; the hospital Model tab never shows build-here pins.
+  - **Setup + weights merged into one compact card** (June 2026, spec:
+    `docs/superpowers/specs/2026-06-12-hospital-setup-weights-merge-design.md`). The
+    controls are one row per slider; below them an always-visible **priority-formula
+    line** ("30% travel · 30% density · 25% exposure · 15% beds — `Balanced`") and a
+    collapsed **"Customize weights"** expander (preset chips + 4 **editable** weight
+    sliders). Moving a slider flips the chip to `Custom`; presets include a 4th
+    **Capacity** scenario (`bed_gap` 0.50). **The same compact design now drives the
+    EMS Model tab too** — both datasets share one render path (`renderModelTab`),
+    EMS keeping its proposed-stations results + "requires re-run" footer.
 - **Filters** — **Hospital Ownership** filter (Public / Private / Both) +
   Map Layers (EMS-only layers are hidden for hospitals; only District Boundaries
   & Population Heatmap remain).
@@ -226,8 +250,14 @@ every step against a regression baseline).
 **Working through the hospital tabs one by one** (current plan):
 - [x] **Model tab** — *done* (June 2026). Redesigned to "settings → gap in four terms"
       (see §2 and the spec). Controls-first, results below; honest zero-states.
-- [ ] **Analysis tab** — next. Polish the 3-lens equity table (labels, the estimated-
-      beds confidence flag, district profile cards).
+      **Then (June 12–13) merged setup + criterion weights into one compact card with
+      a live priority-formula line and a "Customize weights" expander (editable sliders
+      + a 4th `Capacity` preset), and unified that compact design across EMS too** —
+      see §2 and `specs/2026-06-12-hospital-setup-weights-merge-design.md`.
+- [x] **Analysis tab** — *done* (June 12–13). Replaced the dead "Recommended New
+      Stations" section (hospitals have no proposed pins) with **Recommended
+      Interventions** + indicative demand-center ghost markers + facility halos
+      (see §2 and `specs/2026-06-12-hospital-interventions-design.md`).
 - [ ] **Filters tab** — review the hospital ownership filter + which map layers show.
 - [ ] **Dataset-aware legend** — top-left legend still shows EMS labels
       (High/Med/Low · Existing EMS · Proposed site); make it show
@@ -249,10 +279,39 @@ every step against a regression baseline).
 - [ ] Optional: public-beds-per-capita affordability metric (we have ownership + beds).
 
 **Housekeeping:**
-- [ ] Merge `phase2-hospitals` → `main` when ready (use
-      `superpowers:finishing-a-development-branch` or a normal PR).
+- [~] `phase2-hospitals` pushed to GitHub (June 13). Merge → `main` still pending —
+      open a PR when ready (`superpowers:finishing-a-development-branch`).
 - [x] ~~Final quality pass on the Arabic matches.~~ Done (June 2026) — all 39
       cross-checked against the Syndicate; every bed count + region correct, no dupes.
+
+### Session log — June 12–13, 2026 (Model-tab + Analysis-tab polish)
+- **Model tab merged & unified.** Setup controls + criterion weights are now one
+  compact card (one-row sliders, live priority-formula line, collapsed "Customize
+  weights" with editable sliders + presets incl. a new `Capacity` preset). The same
+  compact design now drives **both** EMS and hospitals via a single `renderModelTab`.
+- **District click → white-glow boundary** (the selected polygon lights up; clears on
+  Reset Map / timeout).
+- **Analysis tab: Recommended Interventions** (replaces "Recommended New Stations" for
+  hospitals) with indicative demand-center ghost markers + facility halos (see §2).
+- **Data:** each hospital now carries its `district`; each district carries a
+  `demand_center` (population-weighted WorldPop centroid). Written by
+  `phase1_ahp_explore.py`; needs a rebuild only when raw data/scripts change.
+- **Two bugs found & fixed** (root-caused with a node repro harness, not guessed):
+  1. *Switching to Hospitals showed stale EMS data in the Model tab.* Cause:
+     `renderInterventions` referenced `esc`, which was a **local** const inside
+     `renderHospitalGapResults` → `ReferenceError` thrown inside `setActiveDataset`
+     **before** `renderModelTab` ran, so the panel kept its EMS content. Fix: hoisted
+     a module-level `escJs()` used by both.
+  2. *Reload with Hospitals selected rendered EMS.* Browsers restore `<select>` state
+     but `ACTIVE_DATASET` reset to `'ems'` with no change event. Fix: `initFilters`
+     now syncs `ACTIVE_DATASET` to the dropdown's restored value on load.
+
+> **Honest-framing caveat (for the write-up):** the demand-center ghost marker is an
+> *indicative* population centroid, **not** a recommended build site, and the facility
+> halos are existing hospitals (expansion/contracting candidates) — the hospital view
+> deliberately proposes *no* new pins. This is the "distribution & affordability, not
+> quantity" thesis rendered as UI. (See also: AHP priority tiers are quantile-based, so
+> weights change the *ranking order*, not *how many* districts are flagged High.)
 
 ---
 
@@ -278,8 +337,12 @@ data/
   phase1_ahp_dashboard.html        # the built dashboard (open this)
 docs/superpowers/
   specs/2026-06-07-phase2-hospitals-integration-design.md
-  specs/2026-06-10-hospital-model-tab-design.md   # Model tab "settings -> gap" design
+  specs/2026-06-10-hospital-model-tab-design.md          # Model tab "settings -> gap" design
+  specs/2026-06-12-hospital-setup-weights-merge-design.md # merged setup+weights compact card
+  specs/2026-06-12-hospital-interventions-design.md       # Recommended Interventions + ghost markers
   plans/2026-06-07-phase2-hospitals-integration.md
+  plans/2026-06-12-hospital-setup-weights-merge.md
+  plans/2026-06-12-hospital-interventions.md
 PROJECT_NOTES.md                   # overall project (Phase 1 + Phase 2 section)
 PHASE2_NOTES.md                    # this file
 ```
