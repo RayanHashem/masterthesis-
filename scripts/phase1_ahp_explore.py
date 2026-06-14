@@ -1286,15 +1286,10 @@ def style_ahp(feature):
         'fillOpacity': 0.45,
     }
 
-ahp_layer = folium.FeatureGroup(name='AHP Priority (District Level)', show=False)
-folium.GeoJson(
-    districts_for_map.to_json(),
-    style_function=style_ahp,
-    highlight_function=highlight_district,
-    popup=make_popup,
-).add_to(ahp_layer)
-ahp_layer.add_to(m)
-print(f"  ✓ Added AHP Priority layer")
+# NOTE: The AHP district choropleth is NOT a separate baked layer. The
+# "District Boundaries" layer above carries the AHP fill, toggled client-side by
+# the "AHP Priority (District Level)" checkbox (see setAhpDistrictFill in the JS).
+# A duplicate FeatureGroup here would stack a second colored polygon set on top.
 
 # Grid AHP Priority layers (Phase 4.4)
 if len(grid_cells_gdf) > 0 and 'ahp_priority' in grid_cells_gdf.columns:

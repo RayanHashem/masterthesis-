@@ -22,6 +22,21 @@ let candidateHighlightCircle = null;
 let candidatesLayer = null;       // direct ref to the Folium FeatureGroup
 let candidatesVisible = true;     // tracks current state
 let supplyLayerGroup = null;
+let supplyLayerVisible = true;    // Filters-tab toggle for the supply markers (EMS stations / hospitals)
+let ahpDistrictFillOn = true;     // Filters-tab toggle: color districts by AHP priority
+
+// Resting fill opacity for a district polygon. When the AHP-fill toggle is off the
+// districts show as outlines only (no choropleth color).
+function _districtRestOpacity(match) {
+    if (!ahpDistrictFillOn) return 0;
+    return match ? 0.4 : 0.05;
+}
+
+/** Show/hide the AHP priority choropleth fill on the district polygons. */
+function setAhpDistrictFill(on) {
+    ahpDistrictFillOn = on;
+    if (typeof applyFilters === 'function') applyFilters();  // re-applies resting fill opacity
+}
 
 function formatNum(n) {
     return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
@@ -459,15 +474,31 @@ function refreshSupplyLayer() {
             m.on('click', () => showHospitalDetail(s));
             s._mRef = m;
         } else {
-            m = L.circleMarker([s.lat, s.lon], {
+            // Red "+" badge to match the map legend (Existing EMS).
+            const sz = 18;
+            m = L.marker([s.lat, s.lon], {
                 pane: 'supplyPane',
-                radius: 5, color: '#ffffff', weight: 1.5, fillColor: '#2c7fb8', fillOpacity: 1,
+                icon: L.divIcon({
+                    className: '',
+                    html: `<div class="ems-marker">+</div>`,
+                    iconSize: [sz, sz],
+                    iconAnchor: [sz / 2, sz / 2],
+                }),
             });
             m.bindPopup(`<b>EMS Station</b>` + (s.district_name ? `<br>${escapeHtml(s.district_name)}` : ''));
         }
         return m;
     });
-    supplyLayerGroup = L.layerGroup(markers).addTo(map);
+    supplyLayerGroup = L.layerGroup(markers);
+    if (supplyLayerVisible) supplyLayerGroup.addTo(map);
+}
+
+/** Show/hide the supply-marker layer (existing EMS stations / hospitals). */
+function setSupplyLayerVisible(show) {
+    supplyLayerVisible = show;
+    if (!map || !supplyLayerGroup) return;
+    if (show && !map.hasLayer(supplyLayerGroup)) map.addLayer(supplyLayerGroup);
+    else if (!show && map.hasLayer(supplyLayerGroup)) map.removeLayer(supplyLayerGroup);
 }
 
 // ── Hospital click-detail card (bottom-left) ──────────────────────────────────
@@ -765,6 +796,31 @@ function renderHospitalGapResults(el) {
     const capOk = g.capacity.beds <= 0;
     const accOk = g.access.people <= 0;
     const affOk = g.afford.districts.length === 0;
+
+    // Priority card: show every High district; Medium & Low collapse behind clickable toggles.
+    const priRow = d =>
+        `<div class="gap-dist-row" onclick="onDistrictCardClick('${escJs(d.district_name)}')">
+            <span class="gap-dist-name">${d.district_name}</span>
+            <span class="gap-dist-metric"><span class="gap-pri ${(d.ahp_priority || 'Low').toLowerCase()}">${d.ahp_priority || 'Low'}</span> ${(d.ahp_score || 0).toFixed(3)}</span>
+        </div>`;
+    const priTierRows = tier =>
+        g.priority.districts.filter(d => (d.ahp_priority || 'Low') === tier).map(priRow).join('')
+        || '<div class="gap-dist-empty">None.</div>';
+    const priTierBlock = tier => {
+        const n = g.priority.counts[tier] || 0;
+        return `<details class="gap-tier ${tier.toLowerCase()}">
+            <summary class="gap-tier-summary">
+                <span class="gap-pri ${tier.toLowerCase()}">${tier}</span>
+                <span class="gap-tier-count">${n} district${n === 1 ? '' : 's'}</span>
+                <span class="gap-tier-caret">&#9662;</span>
+            </summary>
+            <div class="gap-dist-list">${priTierRows(tier)}</div>
+        </details>`;
+    };
+    const priorityBody =
+        `<div class="gap-dist-list">${priTierRows('High')}</div>`
+        + priTierBlock('Medium') + priTierBlock('Low');
+
     const cards = [
         { cls: 'capacity', icon: '&#127973;', title: 'Capacity', ok: capOk,
           head: capOk ? '&#10003; At benchmark' : `${fmt(g.capacity.beds)} beds short`,
@@ -787,7 +843,7 @@ function renderHospitalGapResults(el) {
         { cls: 'priority', icon: '&#127919;', title: 'Overall priority', ok: false,
           head: `${g.priority.counts.High} high-priority`,
           sub: `most under-served districts by your weights — ${g.priority.counts.High} high / ${g.priority.counts.Medium} med / ${g.priority.counts.Low} low.`,
-          body: list(g.priority.districts, d => `<span class="gap-pri ${(d.ahp_priority || 'Low').toLowerCase()}">${d.ahp_priority || 'Low'}</span> ${(d.ahp_score || 0).toFixed(3)}`) },
+          body: priorityBody, wrap: false },
     ];
 
     // Cards start closed; re-renders (slider moves) keep whatever the user opened.
@@ -809,7 +865,7 @@ function renderHospitalGapResults(el) {
                         <span class="gap-card-caret">&#9662;</span>
                     </summary>
                     <div class="gap-card-sub">${c.sub}</div>
-                    <div class="gap-dist-list">${c.body}</div>
+                    ${c.wrap === false ? c.body : `<div class="gap-dist-list">${c.body}</div>`}
                 </details>`).join('')}
         </div>`;
 }
@@ -1102,7 +1158,7 @@ function renderModelTab() {
     if (!isHosp) {
         setup += `
         <div class="model-footer-note">
-            <strong>Updates live:</strong> sidebar ranking, score bars, priority counts, district colors on map.<br><strong>Requires re-run:</strong> grid heatmap layers &amp; coverage polygon.
+            <strong>Updates live:</strong> sidebar ranking, score bars, priority counts, district colors on map.
         </div>`;
     }
 
@@ -1225,7 +1281,7 @@ function applyFilters() {
         Object.entries(districtLayersByName).forEach(([name, layer]) => {
             const match = filteredNames.has(name);
             if (layer.setStyle)
-                layer.setStyle(match ? { fillOpacity: 0.4, opacity: 0.8 } : { fillOpacity: 0.05, opacity: 0.15 });
+                layer.setStyle({ fillOpacity: _districtRestOpacity(match), opacity: match ? 0.8 : 0.15 });
             if (layer._path)
                 layer._path.style.pointerEvents = match ? 'auto' : 'none';
         });
@@ -1269,7 +1325,7 @@ function onDistrictCardClick(districtName) {
     highlightTimeout = setTimeout(() => {
         const filteredNames2 = new Set(getFilteredDistricts().map(d => d.district_name));
         const match = filteredNames2.has(districtName);
-        layer.setStyle(match ? { fillOpacity: 0.4, opacity: 0.8, weight: 2, color: '#4a9eff' } : { fillOpacity: 0.05, opacity: 0.15, weight: 2, color: '#4a9eff' });
+        layer.setStyle({ fillOpacity: _districtRestOpacity(match), opacity: match ? 0.8 : 0.15, weight: 2, color: '#4a9eff' });
         if (layer._path) layer._path.style.filter = '';
         highlightTimeout = null;
     }, 1200);
@@ -1286,7 +1342,7 @@ function resetMapView() {
         Object.entries(districtLayersByName).forEach(([name, layer]) => {
             const match = filteredNames.has(name);
             if (layer.setStyle)
-                layer.setStyle(match ? { fillOpacity: 0.4, opacity: 0.8, weight: 2, color: '#4a9eff' } : { fillOpacity: 0.05, opacity: 0.15, weight: 2, color: '#4a9eff' });
+                layer.setStyle({ fillOpacity: _districtRestOpacity(match), opacity: match ? 0.8 : 0.15, weight: 2, color: '#4a9eff' });
             if (layer._path) {
                 layer._path.style.pointerEvents = match ? 'auto' : 'none';
                 layer._path.style.filter = '';
@@ -1337,11 +1393,12 @@ const _LAYER_META = {
 // Folium overlays baked from EMS data — hide them (list + map) for hospitals.
 const EMS_ONLY_LAYERS = new Set([
     '10-Min Coverage (Road Time)',
-    'AHP Priority (District Level)',
     'Grid AHP Priority (High+Medium)',
     'Grid AHP Priority (Low)',
     'Suggested New EMS Stations',
 ]);
+// 'AHP Priority (District Level)' is now a client-side fill toggle (setAhpDistrictFill),
+// not a baked Folium overlay — handled as a virtual row in renderFiltersTab.
 let _layerDefaults = null;  // captured once: layer name -> on-by-default?
 
 /** Hide EMS-only Folium layers when the hospital dataset is active. */
@@ -1385,10 +1442,38 @@ function renderFiltersTab() {
             <button class="ownership-btn${hospitalTypeFilter === 'private' ? ' active' : ''}" onclick="setHospitalFilter('private')">Private only</button>
         </div>` : '';
 
+    // EMS dataset: a toggle for the existing-station markers (drawn outside Folium,
+    // so it isn't in the overlays list — wired to supplyLayerGroup directly).
+    const supplyRowHtml = ACTIVE_DATASET === 'ems' ? `
+        <label class="filter-layer-row" for="flayer-existing-ems">
+            <input type="checkbox" class="filter-layer-cb" id="flayer-existing-ems"
+                ${supplyLayerVisible ? 'checked' : ''} data-supply-toggle="1">
+            <span class="filter-layer-indicator" style="background:#e74c3c"></span>
+            <div class="filter-layer-info">
+                <div class="filter-layer-name">Existing EMS Stations</div>
+                <div class="filter-layer-desc">Current EMS station locations</div>
+            </div>
+        </label>` : '';
+
+    // AHP choropleth fill is painted on the District Boundaries polygons, not a baked
+    // overlay — a virtual row toggles it so districts can be shown as outlines only.
+    const ahpFillRowHtml = `
+        <label class="filter-layer-row" for="flayer-ahp-fill">
+            <input type="checkbox" class="filter-layer-cb" id="flayer-ahp-fill"
+                ${ahpDistrictFillOn ? 'checked' : ''} data-ahp-fill-toggle="1">
+            <span class="filter-layer-indicator" style="background:#9b59b6"></span>
+            <div class="filter-layer-info">
+                <div class="filter-layer-name">AHP Priority (District Level)</div>
+                <div class="filter-layer-desc">District fill colored by AHP priority</div>
+            </div>
+        </label>`;
+
     panel.innerHTML = ownershipHtml + `
         <div class="section-header">Map Layers</div>
         <div class="filter-desc-note">Toggle layers on or off. Changes are visible on the map immediately.</div>
         <div class="filter-layers-list">
+            ${supplyRowHtml}
+            ${ahpFillRowHtml}
             ${entries.map(([name, layer]) => {
                 const meta  = _LAYER_META[name] || { color: '#aaa', desc: '' };
                 const id    = 'flayer-' + name.replace(/[^a-z0-9]/gi, '-').toLowerCase();
@@ -1409,6 +1494,8 @@ function renderFiltersTab() {
 
     panel.querySelectorAll('.filter-layer-cb').forEach(cb => {
         cb.addEventListener('change', () => {
+            if (cb.dataset.supplyToggle) { setSupplyLayerVisible(cb.checked); return; }
+            if (cb.dataset.ahpFillToggle) { setAhpDistrictFill(cb.checked); return; }
             const layer = overlays[cb.dataset.layerName];
             if (!layer) return;
             if (cb.checked) map.addLayer(layer);
@@ -1445,7 +1532,17 @@ function initMapRefs() {
             l.eachLayer(subl => {
                 if (subl.feature && subl.feature.properties) {
                     const name = subl.feature.properties.NAME_2;
-                    if (name) districtLayersByName[name] = subl;
+                    if (name) {
+                        districtLayersByName[name] = subl;
+                        // Folium's highlight_function resets to the baked (colored) style on
+                        // mouseout; re-apply our toggle-aware resting fill so "AHP fill off"
+                        // (and the active filter) survives a hover.
+                        subl.on('mouseout', () => {
+                            if (highlightTimeout) return;  // don't fight an active click-highlight
+                            const match = getFilteredDistricts().some(d => d.district_name === name);
+                            subl.setStyle({ fillOpacity: _districtRestOpacity(match), opacity: match ? 0.8 : 0.15 });
+                        });
+                    }
                 }
             });
         }
@@ -1473,6 +1570,17 @@ function setHospitalFilter(t) {
     if (typeof renderFiltersTab === 'function') renderFiltersTab();  // refresh active button
 }
 
+// Swap the dataset-specific rows of the map legend (priority swatches are shared).
+function updateMapLegend() {
+    const el = document.getElementById('legend-dynamic');
+    if (!el) return;
+    el.innerHTML = ACTIVE_DATASET === 'hospitals'
+        ? '<div><span class="legend-symbol hosp-public">H</span>Public hospital</div>'
+          + '<div><span class="legend-symbol hosp-private">H</span>Private hospital</div>'
+        : '<div><span class="legend-symbol ems">+</span>Existing EMS</div>'
+          + '<div><span class="legend-symbol proposed">+</span>Proposed site</div>';
+}
+
 function setActiveDataset(key) {
     if (!DATASETS[key]) return;
     ACTIVE_DATASET = key;
@@ -1484,7 +1592,9 @@ function setActiveDataset(key) {
     CANDIDATES = (CANDIDATES_BY_PRESET && CANDIDATES_BY_PRESET.balanced) || [];
     DEFAULT_COVERAGE_THRESHOLD = ds.threshold;
 
-    // Reset hospital-specific UI state on every switch.
+    // Reset per-dataset UI state on every switch.
+    supplyLayerVisible = true;   // each dataset starts with its supply markers shown
+    ahpDistrictFillOn = true;    // and with the AHP choropleth fill shown
     hospitalTypeFilter = 'all';
     _modelResultFilter = null;   // tier filter is EMS-specific; don't leak across datasets
     if (typeof hideHospitalDetail === 'function') hideHospitalDetail();
@@ -1493,6 +1603,7 @@ function setActiveDataset(key) {
     // Re-render map + panels for the newly active dataset.
     if (typeof refreshSupplyLayer === 'function') refreshSupplyLayer(); // defined in a later task
     if (typeof applyDatasetLayerVisibility === 'function') applyDatasetLayerVisibility();
+    if (typeof updateMapLegend === 'function') updateMapLegend();
     if (typeof initCandidatesLayer === 'function') initCandidatesLayer();
     if (typeof initModelNormScores === 'function') initModelNormScores();
     if (typeof recomputeAhpScores === 'function') recomputeAhpScores();
@@ -1553,6 +1664,7 @@ function initFilters() {
     initMapRefs();
     refreshSupplyLayer();
     applyDatasetLayerVisibility();
+    updateMapLegend();
     initModelNormScores();
     renderModelTab();
     renderFiltersTab();

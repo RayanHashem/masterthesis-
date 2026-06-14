@@ -694,6 +694,16 @@ body {
     color: #fff;
 }
 
+.legend-symbol.hosp-public {
+    background: #2980b9;
+    color: #fff;
+}
+
+.legend-symbol.hosp-private {
+    background: #c0392b;
+    color: #fff;
+}
+
 /* ── SELECTED DISTRICT CARD (floating over map) ───────────────────────────── */
 .selected-district-card {
     position: fixed;
@@ -1027,6 +1037,24 @@ body {
 .gap-pri.high   { color: var(--pri-high); }
 .gap-pri.medium { color: var(--pri-med); }
 .gap-pri.low    { color: var(--pri-low); }
+
+/* Collapsible Medium/Low tiers inside the Overall priority card. */
+.gap-tier { margin: 0 8px; }
+.gap-tier + .gap-tier { margin-top: 6px; }
+.gap-tier:last-child { margin-bottom: 9px; }
+.gap-tier-summary {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 8px; cursor: pointer; list-style: none;
+    background: var(--bg-panel); border: 1px solid var(--border-1);
+    border-radius: 4px; font-size: 12px;
+    transition: background 0.15s, border-color 0.15s;
+}
+.gap-tier-summary:hover { background: var(--bg-card-2); border-color: var(--border-2); }
+.gap-tier-summary::-webkit-details-marker { display: none; }
+.gap-tier-count { color: var(--text-mute); font-size: 11px; }
+.gap-tier-caret { margin-left: auto; color: var(--text-mute); font-size: 10px; transition: transform 0.15s; }
+.gap-tier[open] .gap-tier-caret { transform: rotate(180deg); }
+.gap-tier .gap-dist-list { padding: 6px 0 2px 0; }
 
 .analysis-controls {
     display: flex;
@@ -1727,3 +1755,17 @@ body {
 .hosp-marker.public  { width: 22px; height: 22px; font-size: 13px; border-width: 2.5px; background: #2980b9; }
 .hosp-marker.private { background: #c0392b; }
 .hosp-marker.unknown { background: #7f8c8d; }
+
+/* Existing EMS station marker — red "+" badge, matches the map legend. */
+.ems-marker {
+    width: 18px; height: 18px;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 14px; font-weight: 900; line-height: 1;
+    font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: #e74c3c;
+    border-radius: 50%; border: 2px solid #fff;
+    box-shadow: 0 1px 5px rgba(0,0,0,0.6);
+    box-sizing: border-box;
+    transition: transform 0.1s ease;
+}
+.ems-marker:hover { transform: scale(1.2); }
