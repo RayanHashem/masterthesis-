@@ -888,9 +888,33 @@ function renderModelResults() {
     neededStations.forEach(s => { if (counts[s._priority] !== undefined) counts[s._priority]++; });
 
     const sortedStations = [...neededStations].sort((a, b) => (b.mean_score || 0) - (a.mean_score || 0));
-    const listStations = _modelResultFilter
-        ? sortedStations.filter(s => s._priority === _modelResultFilter)
-        : sortedStations.slice(0, 5);
+
+    // Tiered list (matches the hospital priority card): all High shown, Medium/Low
+    // collapsible. The chips above still drive which pins show on the map.
+    const stationRow = s => {
+        const label = (s.district_name && s.district_name.length)
+            ? s.district_name : ('Proposed Station #' + s.rank);
+        const safe = label.replace(/"/g, '&quot;');
+        const cls  = (s._priority || 'Low').toLowerCase();
+        return `<div class="gap-dist-row" onclick="onCandidateCardClick(${s.lat}, ${s.lon})">
+            <span class="gap-dist-name">${safe}</span>
+            <span class="gap-dist-metric"><span class="gap-pri ${cls}">${s._priority || 'Low'}</span> ${(s.mean_score || 0).toFixed(3)}</span>
+        </div>`;
+    };
+    const tierRows = tier =>
+        sortedStations.filter(s => (s._priority || 'Low') === tier).map(stationRow).join('')
+        || '<div class="gap-dist-empty">None.</div>';
+    const tierBlock = tier => {
+        const n = counts[tier] || 0;
+        return `<details class="gap-tier ${tier.toLowerCase()}">
+            <summary class="gap-tier-summary">
+                <span class="gap-pri ${tier.toLowerCase()}">${tier}</span>
+                <span class="gap-tier-count">${n} station${n === 1 ? '' : 's'}</span>
+                <span class="gap-tier-caret">&#9662;</span>
+            </summary>
+            <div class="gap-dist-list">${tierRows(tier)}</div>
+        </details>`;
+    };
 
     const chips = [
         { key: 'High',   label: 'High',   count: counts.High },
@@ -912,22 +936,9 @@ function renderModelResults() {
                 ${_showAllProposed ? 'Showing all' : 'Show all'} (${neededCount})
             </div>
         </div>
-        <div class="model-results-list">
-            ${listStations.length === 0
-                ? `<div style="color:#666;font-size:12px;padding:6px 0">No stations in this tier</div>`
-                : listStations.map((s, i) => {
-                    const cls = (s._priority || 'Low').toLowerCase();
-                    const label = (s.district_name && s.district_name.length)
-                        ? s.district_name : ('Proposed Station #' + s.rank);
-                    const safeName = label.replace(/"/g, '&quot;');
-                    return `<div class="model-result-row" onclick="onCandidateCardClick(${s.lat}, ${s.lon})">
-                        <span class="model-result-rank">${i + 1}</span>
-                        <span class="model-result-name">${safeName}</span>
-                        <span class="model-result-priority ${cls}">${s._priority}</span>
-                        <span class="model-result-score">${(s.mean_score || 0).toFixed(3)}</span>
-                    </div>`;
-                }).join('')}
-        </div>`;
+        <div class="gap-dist-list">${tierRows('High')}</div>
+        ${tierBlock('Medium')}
+        ${tierBlock('Low')}`;
 }
 
 function _toggleModelFilter(priority) {
