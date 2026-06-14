@@ -34,7 +34,7 @@ and a redesigned, honest hospital workflow.
 
 ### Geography & population
 - **26 districts** (*qadaa*), boundaries from **GADM 4.1** (admin level 2).
-- **Population** from **WorldPop 2024 CN**, 1 km constrained raster.
+- **Population** from **WorldPop 2025 CN**, 1 km constrained raster.
   Total ≈ **5.8 million** people.
 - **Road travel time** from the **OpenStreetMap** road graph via OSMnx, cached to
   `data/road_graph_lebanon.graphml` (~360 MB; the dashboard build loads it, ~5 min).
@@ -195,7 +195,7 @@ Bed-Capacity-Gap criterion is materially driven by real capacity.
 | File | What | Notes |
 |---|---|---|
 | `data/gadm41_LBN_2.json` | 26 district boundaries | GADM 4.1, admin level 2 |
-| `data/lbn_pop_2024_CN_1km_R2025A_UA_v1.tif` | Population raster | WorldPop 2024, 1 km |
+| `data/lbn_pop_2025_CN_1km_R2025A_UA_v1.tif` | Population raster | WorldPop 2025, 1 km constrained |
 | `data/road_graph_lebanon.graphml` | Road network | OSM via OSMnx (cached, ~360 MB) |
 | `data/EMS_Station_Locations.xlsx` | 52 EMS stations | Phase 1 supply layer |
 | `data/lebanon_healthsites.geojson` | Raw hospital source | 1,356 facilities (HDX/OSM) |

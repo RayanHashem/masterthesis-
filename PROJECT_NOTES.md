@@ -160,7 +160,7 @@ These thresholds are also adjustable live in the dashboard.
 ### Authoritative sources
 
 - **Boundaries** — [GADM 4.1](https://gadm.org), admin level 2
-- **Population** — [WorldPop 2024 CN](https://www.worldpop.org), 1 km constrained
+- **Population** — [WorldPop 2025 CN](https://www.worldpop.org), 1 km constrained
 - **Roads** — OpenStreetMap via OSMnx (cached to `data/road_graph_lebanon.graphml`)
 - **Hospital locations** — [Lebanon Healthsites](https://data.humdata.org/dataset/lebanon-healthsites)
   (Global Healthsites Mapping Project / OpenStreetMap, via HDX), **ODbL** licensed.
@@ -269,7 +269,7 @@ lebanon-ems-ahp/
 ├─ data/
 │  ├─ gadm41_LBN_2.json              # District boundaries (GADM 4.1)
 │  ├─ EMS_Station_Locations.xlsx
-│  ├─ lbn_pop_2024_CN_1km_R2025A_UA_v1.tif   # WorldPop raster
+│  ├─ lbn_pop_2025_CN_1km_R2025A_UA_v1.tif   # WorldPop raster
 │  ├─ phase1_ahp_dashboard.html      # (generated)
 │  ├─ phase1_ahp_districts.json      # (generated — read by Copilot)
 │  └─ road_graph_lebanon.graphml     # (generated, cached OSM graph)
