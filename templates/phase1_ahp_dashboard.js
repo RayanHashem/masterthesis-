@@ -435,6 +435,15 @@ function toggleCandidatesLayer() {
     setCandidatesLayerVisible(!candidatesVisible);
 }
 
+/** The "Proposed Stations" pill is EMS-only — hospitals have no proposed sites. */
+function _updateProposedBtnVisibility() {
+    const btn = document.getElementById('candidates-map-toggle');
+    if (!btn) return;
+    const hasProposed = ACTIVE_DATASET === 'ems'
+        && typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES) && CANDIDATES.length > 0;
+    btn.style.display = hasProposed ? '' : 'none';
+}
+
 // Hospital ownership filter: 'all' | 'public' | 'private'
 let hospitalTypeFilter = 'all';
 const HOSP_COLOR = { public: '#2980b9', private: '#c0392b', unknown: '#7f8c8d' };
@@ -1453,18 +1462,22 @@ function renderFiltersTab() {
             <button class="ownership-btn${hospitalTypeFilter === 'private' ? ' active' : ''}" onclick="setHospitalFilter('private')">Private only</button>
         </div>` : '';
 
-    // EMS dataset: a toggle for the existing-station markers (drawn outside Folium,
-    // so it isn't in the overlays list — wired to supplyLayerGroup directly).
-    const supplyRowHtml = ACTIVE_DATASET === 'ems' ? `
-        <label class="filter-layer-row" for="flayer-existing-ems">
-            <input type="checkbox" class="filter-layer-cb" id="flayer-existing-ems"
+    // A toggle for the supply markers (drawn outside Folium, so not in the overlays
+    // list — wired to supplyLayerGroup directly). Label/color depend on the dataset.
+    const isHospDS = ACTIVE_DATASET === 'hospitals';
+    const supplyName  = isHospDS ? 'Hospitals' : 'Existing EMS Stations';
+    const supplyDesc  = isHospDS ? 'Hospital locations (public & private)' : 'Current EMS station locations';
+    const supplyColor = isHospDS ? '#2980b9' : '#e74c3c';
+    const supplyRowHtml = `
+        <label class="filter-layer-row" for="flayer-supply">
+            <input type="checkbox" class="filter-layer-cb" id="flayer-supply"
                 ${supplyLayerVisible ? 'checked' : ''} data-supply-toggle="1">
-            <span class="filter-layer-indicator" style="background:#e74c3c"></span>
+            <span class="filter-layer-indicator" style="background:${supplyColor}"></span>
             <div class="filter-layer-info">
-                <div class="filter-layer-name">Existing EMS Stations</div>
-                <div class="filter-layer-desc">Current EMS station locations</div>
+                <div class="filter-layer-name">${supplyName}</div>
+                <div class="filter-layer-desc">${supplyDesc}</div>
             </div>
-        </label>` : '';
+        </label>`;
 
     // AHP choropleth fill is painted on the District Boundaries polygons, not a baked
     // overlay — a virtual row toggles it so districts can be shown as outlines only.
@@ -1572,6 +1585,7 @@ function initMapRefs() {
 
     bindMapDistrictClick();
     initCandidatesLayer();
+    _updateProposedBtnVisibility();
 }
 
 // ── DATASET SWITCH ────────────────────────────────────────────────────────────
@@ -1616,6 +1630,7 @@ function setActiveDataset(key) {
     if (typeof applyDatasetLayerVisibility === 'function') applyDatasetLayerVisibility();
     if (typeof updateMapLegend === 'function') updateMapLegend();
     if (typeof initCandidatesLayer === 'function') initCandidatesLayer();
+    if (typeof _updateProposedBtnVisibility === 'function') _updateProposedBtnVisibility();
     if (typeof initModelNormScores === 'function') initModelNormScores();
     if (typeof recomputeAhpScores === 'function') recomputeAhpScores();
     if (typeof updateMapDistrictColors === 'function') updateMapDistrictColors();
