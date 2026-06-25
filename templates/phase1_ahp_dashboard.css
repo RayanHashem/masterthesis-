@@ -1,14 +1,8 @@
-/* ===========================================================================
-   Lebanon EMS — AHP Dashboard
-   Monochrome (black & white) chrome. The Leaflet map keeps its own colors;
-   only the dashboard panel, controls, and copilot UI are restyled here.
-   =========================================================================== */
-
 :root {
-    --bg-app:     #0a0a0a;          /* deepest, used behind everything */
-    --bg-panel:   #111111;          /* panel background */
-    --bg-card:    #1a1a1a;          /* card background */
-    --bg-card-2:  #1f1f1f;          /* hover / nested card */
+    --bg-app:     #0a0a0a;          
+    --bg-panel:   #111111;          
+    --bg-card:    #1a1a1a;          
+    --bg-card-2:  #1f1f1f;          
     --bg-input:   #0d0d0d;
     --border-1:   #2a2a2a;
     --border-2:   #3a3a3a;
@@ -17,11 +11,10 @@
     --text-2:     #cfcfcf;
     --text-mute:  #8a8a8a;
     --text-dim:   #5a5a5a;
-    --accent:     #ffffff;          /* used in place of the old blue/cyan */
+    --accent:     #ffffff;          
     --accent-soft:#aaaaaa;
 
-    /* Priority is conveyed in grayscale on the panel (the map itself stays
-       colorful). High = brightest, Low = dimmest. */
+    
     --pri-high:   #e74c3c;
     --pri-med:    #f39c12;
     --pri-low:    #27ae60;
@@ -65,7 +58,6 @@ body {
     right: 0;
 }
 
-/* ── MAP ──────────────────────────────────────────────────────────────────── */
 .map-container {
     width: 100%;
     height: 100%;
@@ -104,7 +96,6 @@ body {
 .leaflet-popup-content { margin: 12px 16px; }
 .leaflet-popup { outline: none !important; }
 
-/* ── PANEL TOGGLE BUTTON ──────────────────────────────────────────────────── */
 .panel-toggle {
     position: fixed;
     top: 50%;
@@ -128,7 +119,6 @@ body {
 .panel-collapsed .panel-toggle { right: 0; }
 .panel-collapsed .dashboard-panel { transform: translateX(100%); }
 
-/* ── DASHBOARD PANEL ──────────────────────────────────────────────────────── */
 .dashboard-panel {
     width: 400px;
     max-width: 35%;
@@ -146,7 +136,6 @@ body {
     border-left: 1px solid var(--border-1);
 }
 
-/* ── PANEL HEADER ─────────────────────────────────────────────────────────── */
 .panel-header {
     padding: 18px 20px 0;
     flex-shrink: 0;
@@ -166,7 +155,6 @@ body {
     color: var(--text-mute);
 }
 
-/* ── TABS ─────────────────────────────────────────────────────────────────── */
 .tab-bar {
     display: flex;
     border-bottom: 1px solid var(--border-1);
@@ -218,7 +206,6 @@ body {
 
 .tab-panel.active { display: block; }
 
-/* ── STAT CARDS ───────────────────────────────────────────────────────────── */
 .summary-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -251,7 +238,6 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-/* ── SECTIONS ─────────────────────────────────────────────────────────────── */
 .section { margin-bottom: 20px; }
 
 .section-header {
@@ -273,7 +259,6 @@ body {
     font-size: 12px;
 }
 
-/* ── FILTERS ──────────────────────────────────────────────────────────────── */
 .filters-section {
     margin-bottom: 18px;
     padding: 14px;
@@ -420,7 +405,6 @@ body {
     font-size: 12px;
 }
 
-/* ── DISTRICT SEARCH ──────────────────────────────────────────────────────── */
 .district-search {
     width: 100%;
     padding: 7px 10px;
@@ -436,7 +420,6 @@ body {
 .district-search::placeholder { color: var(--text-dim); }
 .district-search:focus { outline: none; border-color: var(--text); }
 
-/* ── AHP RANKING TABLE + SCORE BARS ──────────────────────────────────────── */
 .ahp-ranking-controls {
     display: flex;
     align-items: center;
@@ -473,7 +456,6 @@ body {
 
 .ahp-ranking-table tr:hover { background-color: var(--bg-card); cursor: pointer; }
 
-/* Priority — grayscale on panel; the MAP polygons keep their colors. */
 .ahp-priority-high   { color: var(--pri-high); font-weight: 700; }
 .ahp-priority-medium { color: var(--pri-med);  font-weight: 700; }
 .ahp-priority-low    { color: var(--pri-low);  font-weight: 700; }
@@ -510,7 +492,6 @@ body {
     white-space: nowrap;
 }
 
-/* ── CANDIDATE CARDS ──────────────────────────────────────────────────────── */
 .candidates-section .summary-grid { grid-template-columns: 1fr 1fr; }
 
 .candidate-card {
@@ -632,7 +613,6 @@ body {
 
 .decision-standards-card b { color: var(--text-2); }
 
-/* ── MAP LEGEND ─────────────────────────────────────────────────────────── */
 .map-legend {
     position: fixed;
     left: 14px;
@@ -704,7 +684,6 @@ body {
     color: #fff;
 }
 
-/* ── SELECTED DISTRICT CARD (floating over map) ───────────────────────────── */
 .selected-district-card {
     position: fixed;
     bottom: 96px;
@@ -771,7 +750,6 @@ body {
     font-variant-numeric: tabular-nums;
 }
 
-/* ── MODEL TAB ────────────────────────────────────────────────────────────── */
 .model-note {
     font-size: 11px;
     color: var(--text-mute);
@@ -833,7 +811,6 @@ body {
 
 .model-footer-note strong { color: var(--text-2); }
 
-/* ── MODEL RESULTS ────────────────────────────────────────────────────────── */
 .model-results-section {
     margin-bottom: 18px;
     padding: 14px;
@@ -968,7 +945,6 @@ body {
     background: rgba(39,174,96,0.14); color: var(--pri-low); border: 1px solid rgba(39,174,96,0.45);
 }
 
-/* ── Hospital "gap in four terms" cards (Model tab) ────────────────────────── */
 .gap-cards { display: flex; flex-direction: column; gap: 8px; }
 
 .gap-card {
@@ -1038,7 +1014,6 @@ body {
 .gap-pri.medium { color: var(--pri-med); }
 .gap-pri.low    { color: var(--pri-low); }
 
-/* Collapsible Medium/Low tiers inside the Overall priority card. */
 .gap-tier { margin: 0 8px; }
 .gap-tier + .gap-tier { margin-top: 6px; }
 .gap-tier:last-child { margin-bottom: 9px; }
@@ -1068,7 +1043,6 @@ body {
     margin-bottom: 0;
 }
 
-/* ── CANDIDATE STATUS ─────────────────────────────────────────────────────── */
 .candidate-card-top {
     display: flex;
     align-items: center;
@@ -1107,7 +1081,6 @@ body {
     color: var(--text-mute) !important;
 }
 
-/* ── MODEL STATIONS SUMMARY ──────────────────────────────────────────────── */
 .model-stations-summary {
     display: flex;
     gap: 8px;
@@ -1146,7 +1119,6 @@ body {
     margin-top: 4px;
 }
 
-/* ── COMPACT MODEL SETUP (hospitals) ─────────────────────────────────────── */
 .model-compact-controls {
     padding: 8px 10px;
     background: var(--bg-card);
@@ -1241,7 +1213,6 @@ body {
 
 .model-weights-details summary:hover { color: var(--text-2); }
 
-/* ── RECOMMENDED INTERVENTIONS (hospital Analysis tab) ───────────────────── */
 .iv-card { cursor: pointer; }
 
 .iv-district { font-size: 13px; color: var(--text); flex: 1; }
@@ -1268,7 +1239,6 @@ body {
     color: var(--text-2);
 }
 
-/* Facility halos for intervention highlights (public = stronger) */
 .hosp-halo {
     box-shadow: 0 0 0 3px rgba(255,255,255,0.55), 0 0 12px 4px rgba(255,255,255,0.35);
     border-radius: 50%;
@@ -1279,10 +1249,8 @@ body {
     border-radius: 50%;
 }
 
-/* ── HIDE NATIVE LEAFLET LAYER CONTROL ───────────────────────────────────── */
 .leaflet-control-layers { display: none !important; }
 
-/* ── FILTERS TAB ─────────────────────────────────────────────────────────── */
 .filter-desc-note {
     font-size: 11px;
     color: var(--text-mute);
@@ -1344,7 +1312,6 @@ body {
     margin-top: 2px;
 }
 
-/* ── CANDIDATES MAP TOGGLE (floating button bottom-left) ─────────────────── */
 .candidates-map-toggle {
     position: fixed;
     bottom: 32px;
@@ -1387,9 +1354,6 @@ body {
     transition: background 0.2s;
 }
 
-/* ===========================================================================
-   COPILOT — floating button + sliding panel
-   =========================================================================== */
 .copilot-fab {
     position: fixed;
     right: 28px;
@@ -1672,7 +1636,6 @@ body {
 .copilot-send:hover { background: #e5e5e5; }
 .copilot-send:disabled { opacity: 0.5; cursor: not-allowed; }
 
-/* ── RESPONSIVE ───────────────────────────────────────────────────────────── */
 @media (max-width: 768px) {
     .dashboard-panel { width: 100%; max-width: 100%; }
     .panel-toggle { right: 0 !important; }
@@ -1691,7 +1654,6 @@ body {
     font-size: 13px;
 }
 
-/* Phase 2.5 — hospital capacity NEED/ADEQUATE/OVERSUPPLIED badge */
 .need-badge {
     display: inline-block;
     padding: 2px 7px;
@@ -1703,7 +1665,6 @@ body {
     white-space: nowrap;
 }
 
-/* Phase 2.5 — hospital click-detail card (bottom-left) */
 .hospital-detail-card {
     position: fixed;
     bottom: 96px;
@@ -1731,7 +1692,6 @@ body {
 }
 .hdc-badge { display:inline-block; padding:1px 7px; border-radius:10px; color:#fff; font-size:10px; font-weight:700; }
 
-/* Hospital ownership filter (Filters tab) */
 .ownership-filter { display: flex; gap: 6px; margin: 6px 0 14px; }
 .ownership-btn {
     flex: 1; padding: 7px 6px; border-radius: 6px; cursor: pointer;
@@ -1740,7 +1700,6 @@ body {
 }
 .ownership-btn.active { background: #2980b9; color: #fff; border-color: #2980b9; }
 
-/* Phase 2.5 — hospital "H" badge markers */
 .hosp-marker {
     width: 18px; height: 18px;
     display: flex; align-items: center; justify-content: center;
@@ -1756,7 +1715,6 @@ body {
 .hosp-marker.private { background: #c0392b; }
 .hosp-marker.unknown { background: #7f8c8d; }
 
-/* Existing EMS station marker — red "+" badge, matches the map legend. */
 .ems-marker {
     width: 18px; height: 18px;
     display: flex; align-items: center; justify-content: center;

@@ -1,10 +1,3 @@
-// ============================================================================
-// Lebanon EMS Dashboard – Client-side logic
-// Data constants (DISTRICTS, STATIONS, GOVERNORATES, MAX_POP, LEBANON_BOUNDS, CANDIDATES)
-// are injected by Python above this script block.
-// ============================================================================
-
-// ── Phase 2: dataset-backed globals (sourced from the active dataset) ──
 let DISTRICTS = DATASETS[ACTIVE_DATASET].districts;
 let STATIONS = DATASETS[ACTIVE_DATASET].supply;
 let CRITERIA_CONFIG = DATASETS[ACTIVE_DATASET].criteria;
@@ -15,39 +8,34 @@ let DEFAULT_COVERAGE_THRESHOLD = DATASETS[ACTIVE_DATASET].threshold;
 let map = null;
 let districtLayersByName = {};
 let highlightTimeout = null;
-let _activePreset = 'balanced';   // active weight preset; null = user-customized
-let _ghostMarker = null;      // indicative demand-center circle (hospitals)
-let _haloHospitals = [];      // hospitals currently haloed by an intervention card
+let _activePreset = 'balanced';
+let _ghostMarker = null;
+let _haloHospitals = [];
 let candidateHighlightCircle = null;
-let candidatesLayer = null;       // direct ref to the Folium FeatureGroup
-let candidatesVisible = true;     // tracks current state
+let candidatesLayer = null;
+let candidatesVisible = true;
 let supplyLayerGroup = null;
-let supplyLayerVisible = true;    // Filters-tab toggle for the supply markers (EMS stations / hospitals)
-let ahpDistrictFillOn = true;     // Filters-tab toggle: color districts by AHP priority
+let supplyLayerVisible = true;
+let ahpDistrictFillOn = true;
 
-// Resting fill opacity for a district polygon. When the AHP-fill toggle is off the
-// districts show as outlines only (no choropleth color).
 function _districtRestOpacity(match) {
     if (!ahpDistrictFillOn) return 0;
     return match ? 0.4 : 0.05;
 }
 
-/** Show/hide the AHP priority choropleth fill on the district polygons. */
 function setAhpDistrictFill(on) {
     ahpDistrictFillOn = on;
-    if (typeof applyFilters === 'function') applyFilters();  // re-applies resting fill opacity
+    if (typeof applyFilters === 'function') applyFilters();
 }
 
 function formatNum(n) {
     return n.toLocaleString('en-US', { maximumFractionDigits: 0 });
 }
 
-/** Escapes a string for safe use inside a single-quoted inline onclick handler. */
 function escJs(s) {
     return String(s).replace(/'/g, "\\'").replace(/"/g, '&quot;');
 }
 
-// ── TABS ──────────────────────────────────────────────────────────────────────
 function switchTab(tabId) {
     document.querySelectorAll('.tab-btn').forEach(b =>
         b.classList.toggle('active', b.dataset.tab === tabId));
@@ -55,7 +43,6 @@ function switchTab(tabId) {
         p.classList.toggle('active', p.id === 'tab-' + tabId));
 }
 
-// ── SIDEBAR TOGGLE ────────────────────────────────────────────────────────────
 function togglePanel() {
     const container = document.querySelector('.container');
     const btn = document.getElementById('panel-toggle-btn');
@@ -64,7 +51,6 @@ function togglePanel() {
     setTimeout(() => { if (map && map.invalidateSize) map.invalidateSize(); }, 320);
 }
 
-// ── FILTERS ───────────────────────────────────────────────────────────────────
 function getFilteredDistricts() {
     const govEl  = document.getElementById('filter-governorate');
     const gov    = govEl ? govEl.value : '';
@@ -77,7 +63,6 @@ function getFilteredDistricts() {
     });
 }
 
-// ── SUMMARY CARDS (per-dataset, swap on toggle) ───────────────────────────────
 function renderAhpSummary() {
     const el = document.getElementById('ahp-summary-cards');
     if (!el) return;
@@ -91,7 +76,6 @@ function renderAhpSummary() {
     ).join('');
 }
 
-// ── AHP RANKING TABLE (with score bars) ───────────────────────────────────────
 function renderAhpRanking(filtered) {
     const limitEl  = document.getElementById('ahp-ranking-limit');
     const limitVal = limitEl ? limitEl.value : '10';
@@ -109,7 +93,7 @@ function renderAhpRanking(filtered) {
     let html;
 
     if (isHosp) {
-        // ── 3-lens equity diagnostic: Capacity · Access · Affordability ──
+
         const cap = d => {
             const c = { NEED: ['NEED', '#e74c3c'], ADEQUATE: ['Adequate', '#7f8c8d'], OVERSUPPLIED: ['No need', '#27ae60'] }[d.need_class || 'ADEQUATE'];
             return `<span class="need-badge" style="background:${c[1]}">${c[0]}</span>`;
@@ -121,7 +105,7 @@ function renderAhpRanking(filtered) {
         const aff = d => (d.afford_class === 'none')
             ? `<span class="need-badge" style="background:#e74c3c">No public</span>`
             : `<span class="need-badge" style="background:#27ae60">Public ✓</span>`;
-        // Worst-served first: 1 point per failing lens.
+
         const score = d => (d.need_class === 'NEED' ? 2 : 0)
             + (d.access_class === 'Poor' ? 2 : d.access_class === 'Fair' ? 1 : 0)
             + (d.afford_class === 'none' ? 2 : 0);
@@ -174,7 +158,6 @@ function renderAhpRanking(filtered) {
     });
 }
 
-// ── CANDIDATES ────────────────────────────────────────────────────────────────
 function _getCurrentThreshold() {
     const el = document.getElementById('coverage-threshold');
     return el ? parseFloat(el.value) : (typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 10);
@@ -253,7 +236,7 @@ function askCopilotAboutCandidate(rank, lat, lon) {
 function renderCandidates() {
     classifyActiveCandidates();
     const candidates = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
-    const shown      = _visibleProposed();   // all tiers when "Show all" is on, else active tier
+    const shown      = _visibleProposed();
     const limitEl    = document.getElementById('candidates-limit');
     const limitVal   = limitEl ? limitEl.value : '10';
     const n          = limitVal === 'all' ? shown.length : Math.min(shown.length, parseInt(limitVal, 10) || 10);
@@ -331,12 +314,6 @@ function renderCandidates() {
     if (customBtn) customBtn.addEventListener('click', () => openCopilotWith('Assess placement in ', false));
 }
 
-/** Single source of truth for which proposed stations are "needed" and how they
- *  are tiered. Tags every active-preset candidate with c._priority (High/Medium/
- *  Low, or null if now covered) using the same AHP-score quantiles as the
- *  district model. Returns the list of still-needed candidates. Because the AHP
- *  scores differ per weight preset, the High tier differs per scenario — which is
- *  what makes each preset surface a different shortlist of stations. */
 function classifyActiveCandidates() {
     const threshold = _getCurrentThreshold();
     const cands = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
@@ -359,27 +336,20 @@ function classifyActiveCandidates() {
     return needed;
 }
 
-/** Which priority tier is shown on the map / candidate list. Defaults to High,
- *  but follows the Model-tab chip filter when the user clicks Medium/Low. */
 function _activeDisplayTier() {
     return _modelResultFilter || 'High';
 }
 
-/** The proposed stations currently shown on the map + list: every still-needed
- *  station when "Show all" is on, otherwise just the active tier. */
 function _visibleProposed() {
     const cands = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
-    if (_showAllProposed) return cands.filter(c => c._priority);   // all still-needed tiers
+    if (_showAllProposed) return cands.filter(c => c._priority);
     const tier = _activeDisplayTier();
     return cands.filter(c => c._priority === tier);
 }
 
-/** Shows the active selection of proposed stations on the map (High tier by
- *  default, the chosen tier when a chip is active, or all when "Show all" is on),
- *  hiding the rest. */
 function updateCandidateMarkers() {
     if (!candidatesLayer) return;
-    classifyActiveCandidates();           // tag c._priority on the active CANDIDATES
+    classifyActiveCandidates();
     const showCoords = new Set(
         _visibleProposed().map(c => c.lat.toFixed(5) + ',' + c.lon.toFixed(5))
     );
@@ -399,7 +369,6 @@ function updateCandidateMarkers() {
     });
 }
 
-// ── CANDIDATE CLICK ───────────────────────────────────────────────────────────
 function onCandidateCardClick(lat, lon) {
     if (!map) return;
     if (highlightTimeout) clearTimeout(highlightTimeout);
@@ -420,7 +389,6 @@ function onCandidateCardClick(lat, lon) {
     }, 2500);
 }
 
-// ── CANDIDATES LAYER TOGGLE ───────────────────────────────────────────────────
 function setCandidatesLayerVisible(show) {
     if (!map || !candidatesLayer) return;
     if (show && !map.hasLayer(candidatesLayer))  map.addLayer(candidatesLayer);
@@ -435,7 +403,6 @@ function toggleCandidatesLayer() {
     setCandidatesLayerVisible(!candidatesVisible);
 }
 
-/** The "Proposed Stations" pill is EMS-only — hospitals have no proposed sites. */
 function _updateProposedBtnVisibility() {
     const btn = document.getElementById('candidates-map-toggle');
     if (!btn) return;
@@ -444,21 +411,20 @@ function _updateProposedBtnVisibility() {
     btn.style.display = hasProposed ? '' : 'none';
 }
 
-// Hospital ownership filter: 'all' | 'public' | 'private'
 let hospitalTypeFilter = 'all';
 const HOSP_COLOR = { public: '#2980b9', private: '#c0392b', unknown: '#7f8c8d' };
 
 function _hospVisible(s) {
     if (hospitalTypeFilter === 'all') return true;
     if (hospitalTypeFilter === 'public') return s.htype === 'public';
-    // 'private' includes the untagged/unknown (Lebanon is ~88% private)
+
     return s.htype !== 'public';
 }
 
 function refreshSupplyLayer() {
     if (!map) return;
     if (supplyLayerGroup) { map.removeLayer(supplyLayerGroup); supplyLayerGroup = null; }
-    // Dedicated high-z pane so hospital markers sit ABOVE the heatmap & choropleth.
+
     if (!map.getPane('supplyPane')) {
         map.createPane('supplyPane');
         map.getPane('supplyPane').style.zIndex = 650;
@@ -468,7 +434,7 @@ function refreshSupplyLayer() {
     const markers = list.map(s => {
         let m;
         if (isHosp) {
-            // "H" badge marker, coloured by ownership (public larger/bolder).
+
             const isPub = s.htype === 'public';
             const sz = isPub ? 22 : 18;
             m = L.marker([s.lat, s.lon], {
@@ -483,7 +449,7 @@ function refreshSupplyLayer() {
             m.on('click', () => showHospitalDetail(s));
             s._mRef = m;
         } else {
-            // Red "+" badge to match the map legend (Existing EMS).
+
             const sz = 18;
             m = L.marker([s.lat, s.lon], {
                 pane: 'supplyPane',
@@ -502,7 +468,6 @@ function refreshSupplyLayer() {
     if (supplyLayerVisible) supplyLayerGroup.addTo(map);
 }
 
-/** Show/hide the supply-marker layer (existing EMS stations / hospitals). */
 function setSupplyLayerVisible(show) {
     supplyLayerVisible = show;
     if (!map || !supplyLayerGroup) return;
@@ -510,7 +475,6 @@ function setSupplyLayerVisible(show) {
     else if (!show && map.hasLayer(supplyLayerGroup)) map.removeLayer(supplyLayerGroup);
 }
 
-// ── Hospital click-detail card (bottom-left) ──────────────────────────────────
 function showHospitalDetail(s) {
     const card = document.getElementById('hospital-detail-card');
     if (!card) return;
@@ -539,8 +503,6 @@ function hideHospitalDetail() {
 function initCandidatesLayer() {
     if (!map || typeof CANDIDATES === 'undefined' || !CANDIDATES.length) return;
 
-    // Folium doesn't set options.name on FeatureGroups — find candidates layer
-    // by checking if any sub-layer matches a known candidate coordinate.
     const ref = CANDIDATES[0];
     map.eachLayer(l => {
         if (candidatesLayer) return;
@@ -553,7 +515,6 @@ function initCandidatesLayer() {
         });
     });
 
-    // Attach candidate data to each individual sub-layer for threshold logic
     if (candidatesLayer) {
         candidatesLayer.eachLayer(layer => {
             const ll = layer.getLatLng ? layer.getLatLng() : null;
@@ -572,7 +533,6 @@ function initCandidatesLayer() {
     updateCandidateMarkers();
 }
 
-// ── SELECTED DISTRICT CARD ────────────────────────────────────────────────────
 function showSelectedDistrictCard(districtName) {
     const d    = DISTRICTS.find(x => x.district_name === districtName);
     const card = document.getElementById('selected-district-card');
@@ -580,7 +540,7 @@ function showSelectedDistrictCard(districtName) {
 
     let body;
     if (ACTIVE_DATASET === 'hospitals') {
-        // Hospital equity profile: capacity \u00b7 access \u00b7 affordability
+
         const capC = { NEED: ['NEED', '#e74c3c'], ADEQUATE: ['Adequate', '#7f8c8d'], OVERSUPPLIED: ['No need', '#27ae60'] }[d.need_class || 'ADEQUATE'];
         const accC = { Good: ['Good', '#27ae60'], Fair: ['Fair', '#f39c12'], Poor: ['Poor', '#e74c3c'] }[d.access_class || 'Good'];
         const affOk = d.afford_class !== 'none';
@@ -624,15 +584,12 @@ function hideSelectedDistrictCard() {
     if (card) card.style.display = 'none';
 }
 
-// ── LIVE MODEL ────────────────────────────────────────────────────────────────
-
 const _PRIORITY_FILL   = { High: '#e74c3c', Medium: '#f39c12', Low: '#27ae60' };
-let _modelResultFilter = null; // null = show top 5 all; 'High'/'Medium'/'Low' = filter
-let _showAllProposed   = true;  // default: show every proposed station regardless of tier
+let _modelResultFilter = null;
+let _showAllProposed   = true;
 
-/** Called once at init — derives/stores per-district normalised scores. */
 function initModelNormScores() {
-    // Use Python-shipped values when available; otherwise compute from raw data.
+
     const popDensities = DISTRICTS.map(d => d.pop_density);
     const exposedPops  = DISTRICTS.map(d => d.exposed_population);
     const minPD = Math.min(...popDensities), maxPD = Math.max(...popDensities);
@@ -648,7 +605,6 @@ function initModelNormScores() {
         if (d.norm_exposed_pop === undefined)
             d.norm_exposed_pop = maxEP > minEP ? (d.exposed_population - minEP) / (maxEP - minEP) : 0;
 
-        // Derive norm_access_gap algebraically from the default-weight score if Python didn't ship it
         if (d.norm_access_gap === undefined) {
             const w1 = defaultW['access_gap'] / wTotal;
             const w2 = defaultW['pop_density'] / wTotal;
@@ -658,16 +614,14 @@ function initModelNormScores() {
                 : 0;
         }
 
-        // Store originals so Reset always works
         d._orig_ahp_score      = d.ahp_score;
         d._orig_ahp_priority   = d.ahp_priority;
         d._orig_norm_exposed   = d.norm_exposed_pop;
     });
 }
 
-/** Reads sliders → renormalises weights → recomputes scores + priorities → re-renders. */
 function recomputeAhpScores() {
-    // --- 1. Read weights from sliders ---
+
     let rawWeights = {};
     let rawTotal = 0;
     CRITERIA_CONFIG.forEach(c => {
@@ -680,7 +634,6 @@ function recomputeAhpScores() {
     const normW = {};
     CRITERIA_CONFIG.forEach(c => { normW[c.id] = rawWeights[c.id] / rawTotal; });
 
-    // --- 2. Coverage threshold → recompute exposed_pop norm if travel times available ---
     const threshEl = document.getElementById('coverage-threshold');
     const threshold = threshEl ? parseFloat(threshEl.value) : (typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 10);
     const hasTT = DISTRICTS.length > 0 && DISTRICTS[0].min_travel_time_min !== undefined && DISTRICTS[0].min_travel_time_min !== null;
@@ -692,7 +645,6 @@ function recomputeAhpScores() {
         });
     }
 
-    // --- 3. Compute new AHP score per district ---
     DISTRICTS.forEach(d => {
         d.ahp_score = 0;
         CRITERIA_CONFIG.forEach(c => {
@@ -701,7 +653,6 @@ function recomputeAhpScores() {
         d.ahp_score = Math.round(d.ahp_score * 1000) / 1000;
     });
 
-    // --- 4. Quantile-based priority classification ---
     const highPctEl = document.getElementById('threshold-high');
     const medPctEl  = document.getElementById('threshold-medium');
     const highPct   = highPctEl ? parseInt(highPctEl.value) / 100 : 0.20;
@@ -715,7 +666,6 @@ function recomputeAhpScores() {
         else                           d.ahp_priority = 'Low';
     });
 
-    // --- 5. Update everything ---
     applyFilters();
     updateMapDistrictColors();
     _updateWeightDisplay(normW);
@@ -723,7 +673,6 @@ function recomputeAhpScores() {
     renderModelResults();
 }
 
-/** Updates Leaflet district polygon fill colors to match recomputed priorities. */
 function updateMapDistrictColors() {
     if (!map || !districtLayersByName) return;
     DISTRICTS.forEach(d => {
@@ -733,7 +682,6 @@ function updateMapDistrictColors() {
     });
 }
 
-/** Updates the percentage labels and the formula line in the Model tab. */
 function _updateWeightDisplay(normW) {
     CRITERIA_CONFIG.forEach(c => {
         const pctEl = document.getElementById('pct-' + c.id);
@@ -742,11 +690,9 @@ function _updateWeightDisplay(normW) {
     _updateFormulaLine(normW);
 }
 
-/** Plain-word names for the formula line. */
 const _FORMULA_WORDS = { access_gap: 'travel', pop_density: 'density', exposed_pop: 'exposure', bed_gap: 'beds' };
 const _PRESET_LABELS = { balanced: 'Balanced', access: 'Access', population: 'Population', capacity: 'Capacity' };
 
-/** Updates the formula line + preset chip in the Model tab's setup card. */
 function _updateFormulaLine(normW) {
     const pctsEl = document.getElementById('model-formula-pcts');
     if (!pctsEl) return;
@@ -756,15 +702,12 @@ function _updateFormulaLine(normW) {
     if (chipEl) chipEl.textContent = _activePreset ? (_PRESET_LABELS[_activePreset] || _activePreset) : 'Custom';
 }
 
-/** A weight slider was moved by hand: preset becomes Custom, everything recomputes. */
 function onWeightInput() {
     _activePreset = null;
     document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('preset-btn-active'));
     recomputeAhpScores();
 }
 
-/** Computes the hospital "gap in four terms" from DISTRICTS + current settings.
- *  Pure read of embedded per-district fields; no Python re-run needed. */
 function computeHospitalGaps() {
     const bench = _getBenchmark();
     const thr   = _getThreshold();
@@ -791,7 +734,6 @@ function computeHospitalGaps() {
     };
 }
 
-/** Renders the four hospital "gap" cards (Capacity · Access · Affordability · Priority). */
 function renderHospitalGapResults(el) {
     const g   = computeHospitalGaps();
     const fmt = n => Math.round(n).toLocaleString('en-US');
@@ -806,7 +748,6 @@ function renderHospitalGapResults(el) {
     const accOk = g.access.people <= 0;
     const affOk = g.afford.districts.length === 0;
 
-    // Priority card: show every High district; Medium & Low collapse behind clickable toggles.
     const priRow = d =>
         `<div class="gap-dist-row" onclick="onDistrictCardClick('${escJs(d.district_name)}')">
             <span class="gap-dist-name">${d.district_name}</span>
@@ -855,7 +796,6 @@ function renderHospitalGapResults(el) {
           body: priorityBody, wrap: false },
     ];
 
-    // Cards start closed; re-renders (slider moves) keep whatever the user opened.
     const openCards = new Set(
         Array.from(el.querySelectorAll('details.gap-card[open]'))
              .map(d => Array.from(d.classList).find(c => ['capacity','access','afford','priority'].includes(c)))
@@ -879,7 +819,6 @@ function renderHospitalGapResults(el) {
         </div>`;
 }
 
-/** Updates the Results section inside the Model tab after any recompute. */
 function renderModelResults() {
     const el = document.getElementById('model-results-section');
     if (!el) return;
@@ -887,9 +826,6 @@ function renderModelResults() {
 
     const candidates = (typeof CANDIDATES !== 'undefined' && Array.isArray(CANDIDATES)) ? CANDIDATES : [];
 
-    // This panel is about PROPOSED STATIONS. classifyActiveCandidates() tags each
-    // still-needed station with _priority by AHP-score quantiles, so the
-    // High/Medium/Low chips always sum to the total.
     const neededStations = classifyActiveCandidates();
     const neededCount  = neededStations.length;
 
@@ -898,8 +834,6 @@ function renderModelResults() {
 
     const sortedStations = [...neededStations].sort((a, b) => (b.mean_score || 0) - (a.mean_score || 0));
 
-    // Tiered list (matches the hospital priority card): all High shown, Medium/Low
-    // collapsible. The chips above still drive which pins show on the map.
     const stationRow = s => {
         const label = (s.district_name && s.district_name.length)
             ? s.district_name : ('Proposed Station #' + s.rank);
@@ -951,43 +885,39 @@ function renderModelResults() {
 }
 
 function _toggleModelFilter(priority) {
-    _showAllProposed = false;   // picking a tier exits "show all" mode
+    _showAllProposed = false;
     _modelResultFilter = (_modelResultFilter === priority) ? null : priority;
     renderModelResults();
-    // Keep the map pins and Analysis list in sync with the selected tier.
+
     updateCandidateMarkers();
     renderActionsSection();
 }
 
-/** Toggles showing every proposed station on the map/list, regardless of tier. */
 function _toggleShowAllProposed() {
     _showAllProposed = !_showAllProposed;
-    if (_showAllProposed) _modelResultFilter = null;   // "all" overrides any tier filter
+    if (_showAllProposed) _modelResultFilter = null;
     renderModelResults();
     updateCandidateMarkers();
     renderActionsSection();
 }
 
-/** Renders the full Model tab content from CRITERIA_CONFIG. */
-/** National population-weighted beds/1,000 (the default capacity benchmark). */
 function _natAvgBeds() {
     let beds = 0, pop = 0;
     DISTRICTS.forEach(d => { beds += (d.beds_per_1000 || 0) * (d.population || 0); pop += (d.population || 0); });
     return pop > 0 ? beds / pop : 0;
 }
-/** Current capacity benchmark (beds/1,000) from the slider, else the national default. */
+
 function _getBenchmark() {
     const el = document.getElementById('model-benchmark');
     return el ? parseFloat(el.value) : Math.round(_natAvgBeds() * 10) / 10;
 }
-/** Current coverage threshold (min) from the slider, else the dataset default. */
+
 function _getThreshold() {
     const el = document.getElementById('coverage-threshold');
     return el ? parseFloat(el.value)
               : (typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 30);
 }
 
-// ── RECOMMENDED INTERVENTIONS (hospitals' counterpart of proposed stations) ──
 const _GAP_CHIP   = { capacity: 'capacity', no_public: 'no public', access: 'access' };
 const _GAP_ACTION = {
     capacity:  'Expand bed capacity at existing facilities',
@@ -995,7 +925,6 @@ const _GAP_ACTION = {
     access:    'Operational / transport support',
 };
 
-/** Pure read: districts with ≥1 gap vs the live benchmark/threshold, worst first. */
 function computeInterventions() {
     const bench = _getBenchmark();
     const thr   = _getThreshold();
@@ -1053,7 +982,6 @@ function renderInterventions() {
     }).join('');
 }
 
-/** Removes the ghost demand-center marker and any facility halos. */
 function clearInterventionMapArtifacts() {
     if (_ghostMarker && map) map.removeLayer(_ghostMarker);
     _ghostMarker = null;
@@ -1065,7 +993,6 @@ function clearInterventionMapArtifacts() {
     _haloHospitals = [];
 }
 
-/** Intervention card click: fly to district + ghost demand center + facility halos. */
 function onInterventionClick(districtName) {
     clearInterventionMapArtifacts();
     onDistrictCardClick(districtName);
@@ -1081,8 +1008,6 @@ function onInterventionClick(districtName) {
         _ghostMarker.bindTooltip('Indicative demand center — not a site proposal', { direction: 'top' });
     }
 
-    // Affordability-only gap → halo private hospitals (contracting candidates);
-    // otherwise halo all of the district's hospitals (public emphasized).
     const it = computeInterventions().find(x => x.d.district_name === districtName);
     const privateOnly = !!it && it.gaps.includes('no_public') && !it.gaps.includes('capacity');
     (STATIONS || []).forEach(s => {
@@ -1097,7 +1022,6 @@ function onInterventionClick(districtName) {
     });
 }
 
-/** Dataset dispatcher for the Analysis tab's bottom section. */
 function renderActionsSection() {
     const header = document.getElementById('actions-section-header');
     if (ACTIVE_DATASET === 'hospitals') {
@@ -1116,12 +1040,10 @@ function renderModelTab() {
     const hasTT      = DISTRICTS.length > 0 && DISTRICTS[0].min_travel_time_min !== null && DISTRICTS[0].min_travel_time_min !== undefined;
     const defaultThr = typeof DEFAULT_COVERAGE_THRESHOLD !== 'undefined' ? DEFAULT_COVERAGE_THRESHOLD : 10;
     const supplyWord = isHosp ? 'hospital' : 'station';
-    _activePreset = 'balanced';   // fresh render always starts at defaults
+    _activePreset = 'balanced';
 
     const resultsBlock = `<div class="model-results-section" id="model-results-section"></div>`;
 
-    // Compact "settings → results" card, shared by both datasets: one row per
-    // control, formula line, collapsed weights expander, results below.
     const dsPresets  = (DATASETS[ACTIVE_DATASET] && DATASETS[ACTIVE_DATASET].presets) || WEIGHT_PRESETS;
     const presetBtns = Object.keys(dsPresets).map(p =>
         `<button class="preset-btn${p === 'balanced' ? ' preset-btn-active' : ''}" id="preset-${p}" onclick="applyPreset('${p}')">${_PRESET_LABELS[p] || p}</button>`
@@ -1187,7 +1109,6 @@ function renderModelTab() {
     recomputeAhpScores();
 }
 
-/** Preset scenarios for criterion weights. */
 const WEIGHT_PRESETS = {
     balanced:   { access_gap: 0.50, pop_density: 0.30, exposed_pop: 0.20 },
     access:     { access_gap: 0.70, pop_density: 0.15, exposed_pop: 0.15 },
@@ -1195,54 +1116,46 @@ const WEIGHT_PRESETS = {
 };
 
 function applyPreset(presetName) {
-    // Presets are per-dataset (the hospital model has a 4th 'bed_gap' criterion),
-    // so read them from the active dataset; fall back to the EMS defaults.
+
     const dsPresets = (DATASETS[ACTIVE_DATASET] && DATASETS[ACTIVE_DATASET].presets) || WEIGHT_PRESETS;
     const preset = dsPresets[presetName];
     if (!preset) return;
 
     _activePreset = presetName;
 
-    // Update hidden slider values so recomputeAhpScores reads them
     CRITERIA_CONFIG.forEach(c => {
         const el = document.getElementById('weight-' + c.id);
         if (el) el.value = preset[c.id];
     });
 
-    // Update percentage labels
     const total = Object.values(preset).reduce((s, v) => s + v, 0);
     CRITERIA_CONFIG.forEach(c => {
         const pctEl = document.getElementById('pct-' + c.id);
         if (pctEl) pctEl.textContent = Math.round((preset[c.id] / total) * 100) + '%';
     });
 
-    // Update active button styling
     document.querySelectorAll('.preset-btn').forEach(btn => btn.classList.remove('preset-btn-active'));
     const activeBtn = document.getElementById('preset-' + presetName);
     if (activeBtn) activeBtn.classList.add('preset-btn-active');
 
     if (ACTIVE_DATASET === 'ems') {
-        // Swap candidates to the preset's pre-computed set
+
         if (typeof CANDIDATES_BY_PRESET !== 'undefined' && CANDIDATES_BY_PRESET[presetName]) {
             CANDIDATES = CANDIDATES_BY_PRESET[presetName];
         }
 
-        // Switching presets clears any explicit tier filter but preserves the
-        // "show all" view (the default), so all proposed stations stay visible.
         _modelResultFilter = null;
 
-        // Tally this preset's high-priority stations for the notification
         classifyActiveCandidates();
         const highCount = CANDIDATES.filter(c => c._priority === 'High').length;
 
-        // Show notification
         const notify = document.getElementById('preset-notify');
         if (notify) {
             const labels = { balanced: 'Balanced', access: 'Access Focus', population: 'Population Focus' };
             notify.textContent = labels[presetName] + ' — ' + highCount +
                 ' high-priority station' + (highCount !== 1 ? 's' : '');
             notify.classList.remove('preset-notify-fade');
-            void notify.offsetWidth; // force reflow
+            void notify.offsetWidth;
             notify.classList.add('preset-notify-fade');
         }
     }
@@ -1252,7 +1165,6 @@ function applyPreset(presetName) {
     updateCandidateMarkers();
 }
 
-/** Resets all model controls and district data to Python-computed defaults. */
 function resetModelDefaults() {
     CRITERIA_CONFIG.forEach(c => {
         const el = document.getElementById('weight-' + c.id);
@@ -1269,14 +1181,12 @@ function resetModelDefaults() {
     if (hEl) { hEl.value = 20; if (hVal) hVal.textContent = '20%'; }
     if (mEl) { mEl.value = 50; if (mVal) mVal.textContent = '50%'; }
 
-    // Restore Python-computed originals
     DISTRICTS.forEach(d => {
         d.ahp_score      = d._orig_ahp_score;
         d.ahp_priority   = d._orig_ahp_priority;
         d.norm_exposed_pop = d._orig_norm_exposed;
     });
 
-    // Reset preset to balanced
     applyPreset('balanced');
 
     applyFilters();
@@ -1288,7 +1198,6 @@ function resetModelDefaults() {
     renderModelResults();
 }
 
-// ── APPLY FILTERS ─────────────────────────────────────────────────────────────
 function applyFilters() {
     const filtered      = getFilteredDistricts();
     const filteredNames = new Set(filtered.map(d => d.district_name));
@@ -1317,7 +1226,6 @@ function applyFilters() {
     document.getElementById('filtered-out-msg').style.display = 'none';
 }
 
-// ── DISTRICT CLICK ────────────────────────────────────────────────────────────
 function onDistrictCardClick(districtName) {
     const filtered      = getFilteredDistricts();
     const filteredNames = new Set(filtered.map(d => d.district_name));
@@ -1351,7 +1259,6 @@ function onDistrictCardClick(districtName) {
     }, 1200);
 }
 
-// ── RESET MAP VIEW ────────────────────────────────────────────────────────────
 function resetMapView() {
     if (highlightTimeout) { clearTimeout(highlightTimeout); highlightTimeout = null; }
     hideSelectedDistrictCard();
@@ -1372,7 +1279,6 @@ function resetMapView() {
     document.getElementById('filtered-out-msg').style.display = 'none';
 }
 
-// ── BIND MAP DISTRICT CLICKS ──────────────────────────────────────────────────
 function bindMapDistrictClick() {
     if (!map) return;
     map.eachLayer(l => {
@@ -1386,9 +1292,6 @@ function bindMapDistrictClick() {
     });
 }
 
-// ── MAP LAYER FILTERS ─────────────────────────────────────────────────────────
-
-/** Finds Folium's layer_control_*_layers overlays object regardless of hash. */
 function _getFoliumOverlays() {
     for (const key of Object.keys(window)) {
         if (key.startsWith('layer_control_') && key.endsWith('_layers')) {
@@ -1410,18 +1313,15 @@ const _LAYER_META = {
     'Suggested New EMS Stations':    { color: '#00cec9', desc: 'Proposed new station locations' },
 };
 
-// Folium overlays baked from EMS data — hide them (list + map) for hospitals.
 const EMS_ONLY_LAYERS = new Set([
     '10-Min Coverage (Road Time)',
     'Grid AHP Priority (High+Medium)',
     'Grid AHP Priority (Low)',
     'Suggested New EMS Stations',
 ]);
-// 'AHP Priority (District Level)' is now a client-side fill toggle (setAhpDistrictFill),
-// not a baked Folium overlay — handled as a virtual row in renderFiltersTab.
-let _layerDefaults = null;  // captured once: layer name -> on-by-default?
 
-/** Hide EMS-only Folium layers when the hospital dataset is active. */
+let _layerDefaults = null;
+
 function applyDatasetLayerVisibility() {
     const overlays = _getFoliumOverlays();
     if (!overlays || !map) return;
@@ -1448,11 +1348,9 @@ function renderFiltersTab() {
         return;
     }
 
-    // Hide EMS-specific layers from the list when viewing hospitals.
     const entries = Object.entries(overlays).filter(
         ([name]) => ACTIVE_DATASET !== 'hospitals' || !EMS_ONLY_LAYERS.has(name));
 
-    // Hospital dataset: ownership filter (public / private / both)
     const ownershipHtml = ACTIVE_DATASET === 'hospitals' ? `
         <div class="section-header">Hospital Ownership</div>
         <div class="filter-desc-note">Show hospitals by who runs them. Public = government / affordable.</div>
@@ -1462,8 +1360,6 @@ function renderFiltersTab() {
             <button class="ownership-btn${hospitalTypeFilter === 'private' ? ' active' : ''}" onclick="setHospitalFilter('private')">Private only</button>
         </div>` : '';
 
-    // A toggle for the supply markers (drawn outside Folium, so not in the overlays
-    // list — wired to supplyLayerGroup directly). Label/color depend on the dataset.
     const isHospDS = ACTIVE_DATASET === 'hospitals';
     const supplyName  = isHospDS ? 'Hospitals' : 'Existing EMS Stations';
     const supplyDesc  = isHospDS ? 'Hospital locations (public & private)' : 'Current EMS station locations';
@@ -1479,8 +1375,6 @@ function renderFiltersTab() {
             </div>
         </label>`;
 
-    // AHP choropleth fill is painted on the District Boundaries polygons, not a baked
-    // overlay — a virtual row toggles it so districts can be shown as outlines only.
     const ahpFillRowHtml = `
         <label class="filter-layer-row" for="flayer-ahp-fill">
             <input type="checkbox" class="filter-layer-cb" id="flayer-ahp-fill"
@@ -1524,7 +1418,7 @@ function renderFiltersTab() {
             if (!layer) return;
             if (cb.checked) map.addLayer(layer);
             else            map.removeLayer(layer);
-            // Keep floating toggle in sync for candidates
+
             if (cb.dataset.layerName.includes('Suggested New EMS')) {
                 candidatesLayer  = layer;
                 candidatesVisible = cb.checked;
@@ -1535,13 +1429,11 @@ function renderFiltersTab() {
     });
 }
 
-/** Syncs the Filters tab checkbox when the floating button toggles candidates. */
 function _syncCandidatesFilterCheckbox(isOn) {
     const cb = document.querySelector('.filter-layer-cb[data-layer-name="Suggested New EMS Stations"]');
     if (cb) cb.checked = isOn;
 }
 
-// ── INIT MAP REFS ─────────────────────────────────────────────────────────────
 function initMapRefs() {
     const mapDiv = document.querySelector('.map-container .folium-map');
     if (!mapDiv || !mapDiv.id) return;
@@ -1558,11 +1450,9 @@ function initMapRefs() {
                     const name = subl.feature.properties.NAME_2;
                     if (name) {
                         districtLayersByName[name] = subl;
-                        // Folium's highlight_function resets to the baked (colored) style on
-                        // mouseout; re-apply our toggle-aware resting fill so "AHP fill off"
-                        // (and the active filter) survives a hover.
+
                         subl.on('mouseout', () => {
-                            if (highlightTimeout) return;  // don't fight an active click-highlight
+                            if (highlightTimeout) return;
                             const match = getFilteredDistricts().some(d => d.district_name === name);
                             subl.setStyle({ fillOpacity: _districtRestOpacity(match), opacity: match ? 0.8 : 0.15 });
                         });
@@ -1588,14 +1478,12 @@ function initMapRefs() {
     _updateProposedBtnVisibility();
 }
 
-// ── DATASET SWITCH ────────────────────────────────────────────────────────────
 function setHospitalFilter(t) {
     hospitalTypeFilter = t;
     refreshSupplyLayer();
-    if (typeof renderFiltersTab === 'function') renderFiltersTab();  // refresh active button
+    if (typeof renderFiltersTab === 'function') renderFiltersTab();
 }
 
-// Swap the dataset-specific rows of the map legend (priority swatches are shared).
 function updateMapLegend() {
     const el = document.getElementById('legend-dynamic');
     if (!el) return;
@@ -1617,16 +1505,14 @@ function setActiveDataset(key) {
     CANDIDATES = (CANDIDATES_BY_PRESET && CANDIDATES_BY_PRESET.balanced) || [];
     DEFAULT_COVERAGE_THRESHOLD = ds.threshold;
 
-    // Reset per-dataset UI state on every switch.
-    supplyLayerVisible = true;   // each dataset starts with its supply markers shown
-    ahpDistrictFillOn = true;    // and with the AHP choropleth fill shown
+    supplyLayerVisible = true;
+    ahpDistrictFillOn = true;
     hospitalTypeFilter = 'all';
-    _modelResultFilter = null;   // tier filter is EMS-specific; don't leak across datasets
+    _modelResultFilter = null;
     if (typeof hideHospitalDetail === 'function') hideHospitalDetail();
     if (typeof clearInterventionMapArtifacts === 'function') clearInterventionMapArtifacts();
 
-    // Re-render map + panels for the newly active dataset.
-    if (typeof refreshSupplyLayer === 'function') refreshSupplyLayer(); // defined in a later task
+    if (typeof refreshSupplyLayer === 'function') refreshSupplyLayer();
     if (typeof applyDatasetLayerVisibility === 'function') applyDatasetLayerVisibility();
     if (typeof updateMapLegend === 'function') updateMapLegend();
     if (typeof initCandidatesLayer === 'function') initCandidatesLayer();
@@ -1643,11 +1529,11 @@ function setActiveDataset(key) {
         if (typeof renderAhpRanking === 'function') renderAhpRanking(f);
     }
     if (typeof renderActionsSection === 'function') renderActionsSection();
+    if (typeof updateCopilotForDataset === 'function') updateCopilotForDataset(key);
 }
 
-// ── INIT ──────────────────────────────────────────────────────────────────────
 function initFilters() {
-    // Governorate dropdown
+
     const govSelect = document.getElementById('filter-governorate');
     if (govSelect && Array.isArray(GOVERNORATES)) {
         GOVERNORATES.forEach(g => {
@@ -1659,31 +1545,24 @@ function initFilters() {
         govSelect.addEventListener('change', applyFilters);
     }
 
-    // District search
     const searchInput = document.getElementById('district-search');
     if (searchInput) searchInput.addEventListener('input', applyFilters);
 
-    // Ranking limit
     const rankingLimit = document.getElementById('ahp-ranking-limit');
     if (rankingLimit) rankingLimit.addEventListener('change', () => renderAhpRanking(getFilteredDistricts()));
 
-    // Candidates limit
     const candidatesLimit = document.getElementById('candidates-limit');
     if (candidatesLimit) candidatesLimit.addEventListener('change', renderActionsSection);
 
-    // Floating candidates toggle button
     const toggleBtn2 = document.getElementById('candidates-map-toggle');
     if (toggleBtn2) toggleBtn2.addEventListener('click', toggleCandidatesLayer);
 
-    // Reset map
     const resetBtn = document.getElementById('reset-map-view');
     if (resetBtn) resetBtn.addEventListener('click', resetMapView);
 
-    // Panel toggle
     const toggleBtn = document.getElementById('panel-toggle-btn');
     if (toggleBtn) toggleBtn.addEventListener('click', togglePanel);
 
-    // Dataset selector
     const dsSel = document.getElementById('dataset-select');
     if (dsSel) dsSel.addEventListener('change', e => setActiveDataset(e.target.value));
 
@@ -1697,21 +1576,55 @@ function initFilters() {
     applyFilters();
     renderActionsSection();
 
-    // Browsers restore <select> state across reloads, but ACTIVE_DATASET resets
-    // to 'ems' and no change event fires — leaving the dropdown showing one
-    // dataset while the panels render another. Honor the dropdown's actual value.
     if (dsSel && dsSel.value && dsSel.value !== ACTIVE_DATASET) setActiveDataset(dsSel.value);
 }
 
 document.addEventListener('DOMContentLoaded', initFilters);
 
-// =============================================================================
-// EMS COPILOT — local-only chat client
-// =============================================================================
-// Talks to the FastAPI backend at COPILOT_URL. If the backend is offline the
-// panel still opens, the indicator turns red, and friendly help text is shown.
+const COPILOT_URL = 'http:
 
-const COPILOT_URL = 'http://127.0.0.1:8000';
+const COPILOT_CONFIG = {
+    ems: {
+        title: 'EMS Copilot',
+        sub: 'Ask about coverage, AHP priorities, or placement.',
+        placeholder: 'Ask about coverage, gaps, or placement…',
+        suggestions: [
+            'Which districts are highest priority?',
+            'Compare Beirut and Tripoli',
+            'How does the AHP model work?',
+            'Where can I open an EMS center in Ras al Nabeh, Beirut?',
+        ],
+    },
+    hospitals: {
+        title: 'Hospital Copilot',
+        sub: 'Ask about hospitals, beds, affordability, or access.',
+        placeholder: 'Ask about hospitals, beds, or access gaps…',
+        suggestions: [
+            'How many hospitals in Bekaa?',
+            'Which districts have no public hospitals?',
+            'Nearest hospital to Tripoli',
+            'Affordability in North Lebanon',
+        ],
+    },
+};
+
+function updateCopilotForDataset(key) {
+    const cfg = COPILOT_CONFIG[key] || COPILOT_CONFIG.ems;
+    const titleEl   = document.querySelector('#copilot-panel .title');
+    const subEl     = document.querySelector('#copilot-panel .sub');
+    const inputEl   = document.getElementById('copilot-input');
+    const suggestEl = document.querySelector('#copilot-panel .copilot-suggestions');
+    if (titleEl)   titleEl.innerHTML = `<span class="orb"></span>${cfg.title}`;
+    if (subEl)     subEl.textContent = cfg.sub;
+    if (inputEl)   inputEl.placeholder = cfg.placeholder;
+    if (suggestEl) {
+        suggestEl.innerHTML = cfg.suggestions
+            .map(s => `<button class="copilot-suggestion">${s}</button>`)
+            .join('');
+        suggestEl.querySelectorAll('.copilot-suggestion').forEach(btn =>
+            btn.addEventListener('click', () => sendCopilotMessage(btn.textContent)));
+    }
+}
 
 function escapeHtml(s) {
     return String(s)
@@ -1723,7 +1636,7 @@ function escapeHtml(s) {
 }
 
 function copilotFormat(text) {
-    // Minimal, safe markdown: **bold**, `code`, line breaks.
+
     let out = escapeHtml(text);
     out = out.replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>');
     out = out.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -1782,7 +1695,7 @@ async function sendCopilotMessage(text) {
         const r = await fetch(COPILOT_URL + '/chat', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ message: text, use_llm: true }),
+            body: JSON.stringify({ message: text, use_llm: true, dataset_mode: ACTIVE_DATASET }),
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
         const j = await r.json();
@@ -1856,7 +1769,7 @@ function initCopilot() {
     });
 
     copilotHealthCheck();
-    // Light periodic re-check while the panel is open.
+
     setInterval(() => {
         if (panel.classList.contains('open')) copilotHealthCheck();
     }, 15000);

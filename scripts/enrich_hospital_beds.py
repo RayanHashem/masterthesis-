@@ -1,330 +1,270 @@
-"""Phase 2.5 — Enrich hospital bed counts with authoritative Syndicate data.
+import csv ,json ,math ,os ,re ,statistics ,unicodedata 
 
-Idempotent: always derives the *original* OSM bed tags from the raw GeoJSON, then
-overlays real bed counts from three sources, in priority order:
+SCRIPT_DIR =os .path .dirname (os .path .abspath (__file__ ))
+DATA_DIR =os .path .join (os .path .dirname (SCRIPT_DIR ),"data")
+OSM_CSV =os .path .join (DATA_DIR ,"lebanon_hospitals.csv")
+RAW_GEOJSON =os .path .join (DATA_DIR ,"lebanon_healthsites.geojson")
+SYN_CSV =os .path .join (DATA_DIR ,"lebanon_hospitals_syndicate.csv")
+MANUAL_CSV =os .path .join (DATA_DIR ,"hospitals_manual_coords.csv")
 
-  1. Original OSM `beds` tag (3 hospitals)
-  2. Syndicate-of-Hospitals name-matches (high-confidence, Jaccard >= 0.6)
-  3. Hand-verified large hospitals not present in OSM (curated list below)
-  4. Optional manual coordinates file (data/hospitals_manual_coords.csv)
+MATCH_THRESHOLD =0.5 
 
-Anything still unknown is median-imputed from the *known* set and flagged.
+MATCH_BLOCKLIST_SYN ={'beirut','jabal amel','el bekaa'}
+DEDUP_METERS =300 
 
-Inputs:  data/lebanon_hospitals.csv (cleaned OSM points, for coords/names/osm_id)
-         data/lebanon_healthsites.geojson (raw, for original OSM bed tags)
-         data/lebanon_hospitals_syndicate.csv (real beds, 134 hospitals)
-         data/hospitals_manual_coords.csv (optional; name,beds,lat,lon)
-Output:  data/lebanon_hospitals.csv  (overwritten, now with a `beds_source` column)
-"""
-import csv, json, math, os, re, statistics, unicodedata
+VERIFIED_BIG =[
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DATA_DIR = os.path.join(os.path.dirname(SCRIPT_DIR), "data")
-OSM_CSV = os.path.join(DATA_DIR, "lebanon_hospitals.csv")
-RAW_GEOJSON = os.path.join(DATA_DIR, "lebanon_healthsites.geojson")
-SYN_CSV = os.path.join(DATA_DIR, "lebanon_hospitals_syndicate.csv")
-MANUAL_CSV = os.path.join(DATA_DIR, "hospitals_manual_coords.csv")
-
-MATCH_THRESHOLD = 0.5
-# Reviewed false positives at the 0.5 threshold — generic/ambiguous Syndicate
-# names that fuzzy-match the wrong OSM hospital. Skip these specific pairings.
-MATCH_BLOCKLIST_SYN = {'beirut', 'jabal amel', 'el bekaa'}
-DEDUP_METERS = 300  # a curated point within this distance of an OSM point = same hospital
-
-# Hand-verified large hospitals NOT reliably present in OSM. Coordinates verified
-# individually (Wikidata / Nominatim result that names the hospital itself).
-# (Makassed and Sacré-Cœur were removed — they exist in OSM under Arabic names
-#  and are now matched via ARABIC_BED_MATCHES, avoiding duplicate points.)
-VERIFIED_BIG = [
-    # name, beds, lat, lon, coord_source
-    ("Dar Al-Ajaza Al-Islamia Hospital", 700, 33.8680, 35.4988, "nominatim-verified"),
-    ("American University of Beirut Medical Center", 400, 33.8980, 35.4859, "wikidata"),
-    ("Dar Al-Amal University Hospital", 220, 33.9840, 36.1611, "nominatim-verified"),
-    ("Saint George Hospital University Medical Center", 210, 33.8942, 35.5238, "nominatim-verified"),
-    ("Bahman Hospital", 200, 33.8535, 35.5061, "nominatim-verified"),
+("Dar Al-Ajaza Al-Islamia Hospital",700 ,33.8680 ,35.4988 ,"nominatim-verified"),
+("American University of Beirut Medical Center",400 ,33.8980 ,35.4859 ,"wikidata"),
+("Dar Al-Amal University Hospital",220 ,33.9840 ,36.1611 ,"nominatim-verified"),
+("Saint George Hospital University Medical Center",210 ,33.8942 ,35.5238 ,"nominatim-verified"),
+("Bahman Hospital",200 ,33.8535 ,35.5061 ,"nominatim-verified"),
 ]
 
-# Curated Arabic-name → Syndicate bed-count matches (keyed by OSM id for stability).
-# Each was read and matched by hand against the Syndicate list (name + region).
-ARABIC_BED_MATCHES = {
-    '3938046522': 75,   # مظلوم → New Hospital Mazloum
-    '4986254041': 84,   # المنلا → Mounla
-    '467941851': 70,    # الأرز الزلقا → Arz
-    '5818614453': 120,  # جبل عامل → Jabal Amel
-    '2932842648': 150,  # السان شارل → St Charles
-    '837158168': 100,   # سان جورج (Ajaltoun) → Hopital Saint Georges - Ajaltoun
-    '975076458': 300,   # حمود → Hammoud
-    '3561187768': 20,   # معربس → Maarbes
-    '835250420': 430,   # أوتيل ديو → Hotel Dieu de France
-    '994902555': 150,   # بلفو → Bellevue Medical Center
-    '842359835': 137,   # عين وزين → Ain Wazein
-    '6205014685': 13,   # بخعازي → Bekhaazi
-    '1052515181': 200,  # المقاصد → Makassed
-    '844266947': 907,   # الصليب للأمراض العقلية → Psychiatric Hospital of the Cross
-    '642515061': 200,   # الزهراء → Al Zahraa University Hospital
-    '4461868278': 60,   # سرحال → Hopital Dr S. Serhal
-    '4966703572': 100,  # الراعي → Raii
-    '284812334': 150,   # الجعيتاوي → Hopital Libanais (Geitaoui)
-    '236020132': 240,   # الرسول الأعظم → Al-Rassoul Al-Aazam
-    '409468812': 150,   # جبل لبنان → Mount Lebanon Hospital
-    '519087818': 130,   # سانت تريز الحدث → Hôpital Sainte Thérèse
-    '2706923700': 75,   # النجدة الشعبية → Secours Populaire Libanais-Nabatieh
-    '4923267521': 50,   # شاهين → Hopital Chahine
-    '409961805': 50,    # الحايك → Hopital Hayek
-    '1321433640': 37,   # الشيخ راغب حرب → Ragheb Harb
-    '4522495797': 50,   # البيسار → Al Bissar Hospital
-    '993574780': 130,   # بيت شباب → Beit Chabab
-    '802992023': 78,    # بحنس → Bhannes
-    '303946250': 65,    # سان لويس جونية → St Louis
-    '305423504': 100,   # اللبناني الكندي → Libano-Canadien
-    '3061157514': 32,   # شتورا → Chtoura Hospital
-    '386796001': 120,   # لبيب → Labib Medical Center
-    '835249938': 160,   # رزق → Clinique Dr. Rizk
-    '1181973647': 120,  # خوري → Khoury General Hospital - Zahle
-    '445619060': 200,   # الشرق الأوسط الصحي الجامعي → Middle East Institute of Health
-    '835863086': 159,   # مار يوسف → St Joseph - Najjar Medical Center
-    '386795333': 100,   # دلاعة → Dalla'a General Hospital
-    '1857670915': 128,  # النيني → Nini hospital
-    '583705258': 234,   # قلب يسوع → Sacre Coeur
+ARABIC_BED_MATCHES ={
+'3938046522':75 ,
+'4986254041':84 ,
+'467941851':70 ,
+'5818614453':120 ,
+'2932842648':150 ,
+'837158168':100 ,
+'975076458':300 ,
+'3561187768':20 ,
+'835250420':430 ,
+'994902555':150 ,
+'842359835':137 ,
+'6205014685':13 ,
+'1052515181':200 ,
+'844266947':907 ,
+'642515061':200 ,
+'4461868278':60 ,
+'4966703572':100 ,
+'284812334':150 ,
+'236020132':240 ,
+'409468812':150 ,
+'519087818':130 ,
+'2706923700':75 ,
+'4923267521':50 ,
+'409961805':50 ,
+'1321433640':37 ,
+'4522495797':50 ,
+'993574780':130 ,
+'802992023':78 ,
+'303946250':65 ,
+'305423504':100 ,
+'3061157514':32 ,
+'386796001':120 ,
+'835249938':160 ,
+'1181973647':120 ,
+'445619060':200 ,
+'835863086':159 ,
+'386795333':100 ,
+'1857670915':128 ,
+'583705258':234 ,
 }
 
-# Curated public/governmental-hospital bed counts (keyed by OSM id), value = (beds, source).
-# The Syndicate covers private hospitals only, so the 28 governmental hospitals would
-# otherwise all be median-imputed. These are the large/well-documented public hospitals,
-# each from an authoritative source:
-#   - moph-locator : MoPH Health Facility Locator per-department bed totals (registered beds)
-#   - wikipedia    : documented licensed/physical capacity (no MoPH per-dept figure published)
-# NOTE on metric: the moph-locator figures are MoPH-registered beds; RHUH uses documented
-# physical capacity (544 nominal; ~200 currently functional under the funding crisis — see
-# the operational-status caveat in PHASE2_NOTES). Smaller/undocumented governmental hospitals
-# (Baabda, Baalbek, Bint Jbeil, Military, ...) remain median-imputed and flagged.
-PUBLIC_BED_MATCHES = {
-    # RHUH: documented physical capacity (no MoPH per-dept figure published).
-    '993570500':  (544, 'wikipedia'),     # مستشفى الحريري الحكومي → Rafik Hariri Univ. Hospital
-    # The rest: full bed total (medicine+surgery+BGYN+pediatrics+ICU/CCU) read from the
-    # MoPH Health Facility Locator profile page (slug-resolved, June 2026).
-    '837909683':  (122, 'moph-locator'),  # Saida Governmental (27+23+29+35+8)
-    '1053701650': (100, 'moph-locator'),  # مستشفى النبطية الحكومي → Nabatieh (50+20+10+10+10)
-    '838327593':  (78,  'moph-locator'),  # Tripoli Governmental (15+15+19+24+5)
-    '842721483':  (59,  'moph-locator'),  # الياس الهراوي → Elias Hraoui, Zahle (39+3+9+0+8)
-    '1041902677': (32,  'moph-locator'),  # Bcharreh Governmental (18+12+1+1+0)
-    '836106045':  (55,  'moph-locator'),  # Dr Abdullah Al Rassi Governmental (19+0+18+18+0)
-    '1015151934': (55,  'moph-locator'),  # Hasbaya Governmental (19+8+2+22+4)
-    '844274432':  (20,  'moph-locator'),  # Jezzine Governmental (10+10+0+0+0)
-    '843152614':  (44,  'moph-locator'),  # Rachaya Governmental (37+0+2+2+3)
-    '943312183':  (57,  'moph-locator'),  # Sibline Governmental (12+18+6+14+7)
-    '1049394290': (38,  'moph-locator'),  # Sir Denniye Governmental (12+10+8+8+0)
-    '837390755':  (39,  'moph-locator'),  # Bouar = Ftouh Keserwan Governmental (8+18+7+2+4)
+PUBLIC_BED_MATCHES ={
+
+'993570500':(544 ,'wikipedia'),
+
+'837909683':(122 ,'moph-locator'),
+'1053701650':(100 ,'moph-locator'),
+'838327593':(78 ,'moph-locator'),
+'842721483':(59 ,'moph-locator'),
+'1041902677':(32 ,'moph-locator'),
+'836106045':(55 ,'moph-locator'),
+'1015151934':(55 ,'moph-locator'),
+'844274432':(20 ,'moph-locator'),
+'843152614':(44 ,'moph-locator'),
+'943312183':(57 ,'moph-locator'),
+'1049394290':(38 ,'moph-locator'),
+'837390755':(39 ,'moph-locator'),
 }
 
-STOP = {'hospital','medical','center','centre','hopital','clinique','clinic',
-        'university','of','the','de','el','al','la','st','saint'}
+STOP ={'hospital','medical','center','centre','hopital','clinique','clinic',
+'university','of','the','de','el','al','la','st','saint'}
 
+def norm (s ):
+    s =unicodedata .normalize ('NFKD',s ).encode ('ascii','ignore').decode ().lower ()
+    s =re .sub (r'[^a-z0-9 ]',' ',s )
+    return [t for t in s .split ()if t not in STOP and len (t )>1 ]
 
-def norm(s):
-    s = unicodedata.normalize('NFKD', s).encode('ascii', 'ignore').decode().lower()
-    s = re.sub(r'[^a-z0-9 ]', ' ', s)
-    return [t for t in s.split() if t not in STOP and len(t) > 1]
+def jac (a ,b ):
+    A ,B =set (a ),set (b )
+    return len (A &B )/len (A |B )if A |B else 0 
 
+def parse_beds (val ):
+    if val is None :
+        return None 
+    m =re .search (r"\d{1,4}",str (val ).replace (",",""))
+    return int (m .group ())if m else None 
 
-def jac(a, b):
-    A, B = set(a), set(b)
-    return len(A & B) / len(A | B) if A | B else 0
+def haversine_m (lat1 ,lon1 ,lat2 ,lon2 ):
+    R =6371000 
+    p1 ,p2 =math .radians (lat1 ),math .radians (lat2 )
+    dp =math .radians (lat2 -lat1 )
+    dl =math .radians (lon2 -lon1 )
+    a =math .sin (dp /2 )**2 +math .cos (p1 )*math .cos (p2 )*math .sin (dl /2 )**2 
+    return 2 *R *math .asin (math .sqrt (a ))
 
+def main ():
+    osm =list (csv .DictReader (open (OSM_CSV ,encoding ="utf-8")))
 
-def parse_beds(val):
-    if val is None:
-        return None
-    m = re.search(r"\d{1,4}", str(val).replace(",", ""))
-    return int(m.group()) if m else None
+    osm =[r for r in osm if str (r .get ("osm_id","")).strip ()]
+    syn =list (csv .DictReader (open (SYN_CSV ,encoding ="utf-8")))
 
+    raw =json .load (open (RAW_GEOJSON ,encoding ="utf-8"))
+    osm_beds ={}
+    for f in raw ["features"]:
+        p =f .get ("properties",{})or {}
+        oid =str (p .get ("osm_id")or "")
+        if oid :
+            osm_beds [oid ]=parse_beds (p .get ("beds"))
 
-def haversine_m(lat1, lon1, lat2, lon2):
-    R = 6371000
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp = math.radians(lat2 - lat1)
-    dl = math.radians(lon2 - lon1)
-    a = math.sin(dp/2)**2 + math.cos(p1)*math.cos(p2)*math.sin(dl/2)**2
-    return 2 * R * math.asin(math.sqrt(a))
+    for r in osm :
+        b =osm_beds .get (str (r ["osm_id"]))
+        r ["beds"]=b 
+        r ["beds_source"]="osm-tag"if b is not None else ""
 
+    n_match =0 
+    for r in osm :
+        if not re .search (r"[a-zA-Z]",r ["name"]):
+            continue 
+        ot =norm (r ["name"])
+        if not ot :
+            continue 
+        best ,bsc =None ,0 
+        for s in syn :
+            sc =jac (ot ,norm (s ["name"]))
+            if sc >bsc :
+                bsc ,best =sc ,s 
+        if (best and bsc >=MATCH_THRESHOLD and best ["beds"]
+        and best ["name"].strip ().lower ()not in MATCH_BLOCKLIST_SYN ):
+            r ["beds"]=int (best ["beds"])
+            r ["beds_source"]="syndicate-match"
+            n_match +=1 
 
-def main():
-    osm = list(csv.DictReader(open(OSM_CSV, encoding="utf-8")))
-    # Idempotency: drop any synthetic rows this script added on a prior run
-    # (curated/manual additions have no osm_id); always start from the OSM base.
-    osm = [r for r in osm if str(r.get("osm_id", "")).strip()]
-    syn = list(csv.DictReader(open(SYN_CSV, encoding="utf-8")))
+    n_arabic =0 
+    for r in osm :
+        beds =ARABIC_BED_MATCHES .get (str (r .get ("osm_id","")))
+        if beds :
+            r ["beds"]=int (beds )
+            r ["beds_source"]="syndicate-arabic"
+            n_arabic +=1 
 
-    # 1) original OSM bed tags, keyed by osm_id (idempotent ground truth)
-    raw = json.load(open(RAW_GEOJSON, encoding="utf-8"))
-    osm_beds = {}
-    for f in raw["features"]:
-        p = f.get("properties", {}) or {}
-        oid = str(p.get("osm_id") or "")
-        if oid:
-            osm_beds[oid] = parse_beds(p.get("beds"))
+    n_public =0 
+    for r in osm :
+        match =PUBLIC_BED_MATCHES .get (str (r .get ("osm_id","")))
+        if match :
+            beds ,src =match 
+            r ["beds"]=int (beds )
+            r ["beds_source"]=f"public-{src }"
+            n_public +=1 
 
-    # Reset each OSM row to its true original bed tag
-    for r in osm:
-        b = osm_beds.get(str(r["osm_id"]))
-        r["beds"] = b              # int or None
-        r["beds_source"] = "osm-tag" if b is not None else ""
+    added =[]
+    for name ,beds ,lat ,lon ,csrc in VERIFIED_BIG :
 
-    # 2) Syndicate name-matches -> real beds on matched OSM rows
-    n_match = 0
-    for r in osm:
-        if not re.search(r"[a-zA-Z]", r["name"]):
-            continue
-        ot = norm(r["name"])
-        if not ot:
-            continue
-        best, bsc = None, 0
-        for s in syn:
-            sc = jac(ot, norm(s["name"]))
-            if sc > bsc:
-                bsc, best = sc, s
-        if (best and bsc >= MATCH_THRESHOLD and best["beds"]
-                and best["name"].strip().lower() not in MATCH_BLOCKLIST_SYN):
-            r["beds"] = int(best["beds"])
-            r["beds_source"] = "syndicate-match"
-            n_match += 1
-
-    # 2b) Curated Arabic-name matches (keyed by OSM id) → real beds
-    n_arabic = 0
-    for r in osm:
-        beds = ARABIC_BED_MATCHES.get(str(r.get("osm_id", "")))
-        if beds:
-            r["beds"] = int(beds)
-            r["beds_source"] = "syndicate-arabic"
-            n_arabic += 1
-
-    # 2c) Curated public/governmental-hospital beds (keyed by OSM id) → real beds
-    n_public = 0
-    for r in osm:
-        match = PUBLIC_BED_MATCHES.get(str(r.get("osm_id", "")))
-        if match:
-            beds, src = match
-            r["beds"] = int(beds)
-            r["beds_source"] = f"public-{src}"
-            n_public += 1
-
-    # 3) Hand-verified big hospitals: merge into nearby OSM point, else add new
-    added = []
-    for name, beds, lat, lon, csrc in VERIFIED_BIG:
-        # nearest existing OSM point
-        near = min(osm, key=lambda r: haversine_m(lat, lon, float(r["lat"]), float(r["lon"])))
-        d = haversine_m(lat, lon, float(near["lat"]), float(near["lon"]))
-        if d <= DEDUP_METERS:
-            near["beds"] = beds
-            near["beds_source"] = f"syndicate-verified({csrc};merged)"
-        else:
-            added.append({
-                "name": name, "lat": round(lat, 6), "lon": round(lon, 6),
-                "beds": beds, "beds_estimated": False,
-                "beds_source": f"syndicate-verified({csrc})",
-                "operator": "", "operator_type": "",
-                "osm_id": "", "geom_type": "Point",
+        near =min (osm ,key =lambda r :haversine_m (lat ,lon ,float (r ["lat"]),float (r ["lon"])))
+        d =haversine_m (lat ,lon ,float (near ["lat"]),float (near ["lon"]))
+        if d <=DEDUP_METERS :
+            near ["beds"]=beds 
+            near ["beds_source"]=f"syndicate-verified({csrc };merged)"
+        else :
+            added .append ({
+            "name":name ,"lat":round (lat ,6 ),"lon":round (lon ,6 ),
+            "beds":beds ,"beds_estimated":False ,
+            "beds_source":f"syndicate-verified({csrc })",
+            "operator":"","operator_type":"",
+            "osm_id":"","geom_type":"Point",
             })
 
-    # 4) Optional manual coordinates file
-    n_manual = 0
-    if os.path.exists(MANUAL_CSV):
-        for m in csv.DictReader(open(MANUAL_CSV, encoding="utf-8")):
-            lat, lon, beds = m.get("lat", ""), m.get("lon", ""), parse_beds(m.get("beds"))
-            if not (lat and lon and beds):
-                continue
-            added.append({
-                "name": m.get("name", "").strip() or "Hospital",
-                "lat": round(float(lat), 6), "lon": round(float(lon), 6),
-                "beds": beds, "beds_estimated": False, "beds_source": "manual",
-                "operator": "", "operator_type": "", "osm_id": "", "geom_type": "Point",
+    n_manual =0 
+    if os .path .exists (MANUAL_CSV ):
+        for m in csv .DictReader (open (MANUAL_CSV ,encoding ="utf-8")):
+            lat ,lon ,beds =m .get ("lat",""),m .get ("lon",""),parse_beds (m .get ("beds"))
+            if not (lat and lon and beds ):
+                continue 
+            added .append ({
+            "name":m .get ("name","").strip ()or "Hospital",
+            "lat":round (float (lat ),6 ),"lon":round (float (lon ),6 ),
+            "beds":beds ,"beds_estimated":False ,"beds_source":"manual",
+            "operator":"","operator_type":"","osm_id":"","geom_type":"Point",
             })
-            n_manual += 1
+            n_manual +=1 
 
-    rows = osm + added
+    rows =osm +added 
 
-    # 5) median-impute the still-unknown beds from the known set
-    known = [r["beds"] for r in rows if isinstance(r["beds"], int)]
-    median_beds = int(statistics.median(known)) if known else 0
-    for r in rows:
-        if isinstance(r["beds"], int):
-            r["beds_estimated"] = False
-            if not r.get("beds_source"):
-                r["beds_source"] = "osm-tag"
-        else:
-            r["beds"] = median_beds
-            r["beds_estimated"] = True
-            r["beds_source"] = "median-estimate"
+    known =[r ["beds"]for r in rows if isinstance (r ["beds"],int )]
+    median_beds =int (statistics .median (known ))if known else 0 
+    for r in rows :
+        if isinstance (r ["beds"],int ):
+            r ["beds_estimated"]=False 
+            if not r .get ("beds_source"):
+                r ["beds_source"]="osm-tag"
+        else :
+            r ["beds"]=median_beds 
+            r ["beds_estimated"]=True 
+            r ["beds_source"]="median-estimate"
 
-    # ── Public / private classification ──────────────────────────────────────
-    # Lebanese public hospitals are almost all named "<Place> Governmental
-    # Hospital" / "...الحكومي"; OSM also carries an operator_type tag. Anything
-    # confirmed not-public is private. With pharmacies/Red-Cross/unnamed already
-    # removed, the remaining untagged hospitals are private by inference (Lebanon
-    # is ~88% private) — flagged via ownership_source so the inference is explicit.
-    n_pub = n_priv_tag = n_priv_inf = 0
-    for r in rows:
-        text = f"{r.get('name','')} {r.get('operator','')}".lower()
-        otype = (r.get("operator_type") or "").lower()
-        bsrc = r.get("beds_source", "")
-        is_public = (
-            any(k in text for k in ("government", "حكوم", "ministry", "moph"))
-            or otype in ("public", "government", "military")
+    n_pub =n_priv_tag =n_priv_inf =0 
+    for r in rows :
+        text =f"{r .get ('name','')} {r .get ('operator','')}".lower ()
+        otype =(r .get ("operator_type")or "").lower ()
+        bsrc =r .get ("beds_source","")
+        is_public =(
+        any (k in text for k in ("government","حكوم","ministry","moph"))
+        or otype in ("public","government","military")
         )
-        if is_public:
-            r["hospital_type"] = "public"
-            r["ownership_source"] = "tagged"
-            n_pub += 1
-        elif otype in ("private", "business") or bsrc.startswith("syndicate"):
-            r["hospital_type"] = "private"
-            r["ownership_source"] = "tagged"
-            n_priv_tag += 1
-        else:
-            r["hospital_type"] = "private"
-            r["ownership_source"] = "inferred"
-            n_priv_inf += 1
+        if is_public :
+            r ["hospital_type"]="public"
+            r ["ownership_source"]="tagged"
+            n_pub +=1 
+        elif otype in ("private","business")or bsrc .startswith ("syndicate"):
+            r ["hospital_type"]="private"
+            r ["ownership_source"]="tagged"
+            n_priv_tag +=1 
+        else :
+            r ["hospital_type"]="private"
+            r ["ownership_source"]="inferred"
+            n_priv_inf +=1 
 
-    # Write
-    fields = ["name", "lat", "lon", "beds", "beds_estimated", "beds_source",
-              "hospital_type", "ownership_source", "operator", "operator_type",
-              "osm_id", "geom_type"]
-    with open(OSM_CSV, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=fields)
-        w.writeheader()
-        for r in rows:
-            w.writerow({k: r.get(k, "") for k in fields})
+    fields =["name","lat","lon","beds","beds_estimated","beds_source",
+    "hospital_type","ownership_source","operator","operator_type",
+    "osm_id","geom_type"]
+    with open (OSM_CSV ,"w",newline ="",encoding ="utf-8")as fh :
+        w =csv .DictWriter (fh ,fieldnames =fields )
+        w .writeheader ()
+        for r in rows :
+            w .writerow ({k :r .get (k ,"")for k in fields })
 
-    # Also export the FINAL points as GeoJSON (overwrites prepare_hospitals.py's raw
-    # intermediate) so data/lebanon_hospitals.geojson matches the enriched dataset.
-    feats = [{
-        "type": "Feature",
-        "geometry": {"type": "Point",
-                     "coordinates": [round(float(r["lon"]), 6), round(float(r["lat"]), 6)]},
-        "properties": {
-            "name": r["name"], "beds": int(r["beds"]),
-            "beds_estimated": bool(r["beds_estimated"]),
-            "beds_source": r.get("beds_source", ""),
-            "hospital_type": r.get("hospital_type", ""),
-            "ownership_source": r.get("ownership_source", ""),
-            "operator": r.get("operator", ""), "operator_type": r.get("operator_type", ""),
-            "osm_id": r.get("osm_id", ""), "geom_type": r.get("geom_type", "Point"),
-        },
-    } for r in rows]
-    with open(os.path.join(DATA_DIR, "lebanon_hospitals.geojson"), "w", encoding="utf-8") as fh:
-        json.dump({"type": "FeatureCollection", "features": feats}, fh, ensure_ascii=False)
+    feats =[{
+    "type":"Feature",
+    "geometry":{"type":"Point",
+    "coordinates":[round (float (r ["lon"]),6 ),round (float (r ["lat"]),6 )]},
+    "properties":{
+    "name":r ["name"],"beds":int (r ["beds"]),
+    "beds_estimated":bool (r ["beds_estimated"]),
+    "beds_source":r .get ("beds_source",""),
+    "hospital_type":r .get ("hospital_type",""),
+    "ownership_source":r .get ("ownership_source",""),
+    "operator":r .get ("operator",""),"operator_type":r .get ("operator_type",""),
+    "osm_id":r .get ("osm_id",""),"geom_type":r .get ("geom_type","Point"),
+    },
+    }for r in rows ]
+    with open (os .path .join (DATA_DIR ,"lebanon_hospitals.geojson"),"w",encoding ="utf-8")as fh :
+        json .dump ({"type":"FeatureCollection","features":feats },fh ,ensure_ascii =False )
 
-    real = sum(1 for r in rows if not r["beds_estimated"])
-    print(f"OK: {len(rows)} hospitals total")
-    print(f"  name-matched (syndicate): {n_match}")
-    print(f"  arabic-name matched: {n_arabic}")
-    print(f"  public-hospital matched (moph/wikipedia): {n_public}")
-    print(f"  hand-verified added/merged: {len(VERIFIED_BIG)}  (new points: {len(added) - n_manual})")
-    print(f"  manual-coords added: {n_manual}")
-    print(f"  REAL bed counts now: {real} / {len(rows)}  (was 3)")
-    print(f"  median used for the remaining {len(rows) - real} estimates: {median_beds}")
-    print(f"  type — public: {n_pub} | private (tagged): {n_priv_tag} | private (inferred): {n_priv_inf}")
-    print(f"Wrote {OSM_CSV}")
+    real =sum (1 for r in rows if not r ["beds_estimated"])
+    print (f"OK: {len (rows )} hospitals total")
+    print (f"  name-matched (syndicate): {n_match }")
+    print (f"  arabic-name matched: {n_arabic }")
+    print (f"  public-hospital matched (moph/wikipedia): {n_public }")
+    print (f"  hand-verified added/merged: {len (VERIFIED_BIG )}  (new points: {len (added )-n_manual })")
+    print (f"  manual-coords added: {n_manual }")
+    print (f"  REAL bed counts now: {real } / {len (rows )}  (was 3)")
+    print (f"  median used for the remaining {len (rows )-real } estimates: {median_beds }")
+    print (f"  type — public: {n_pub } | private (tagged): {n_priv_tag } | private (inferred): {n_priv_inf }")
+    print (f"Wrote {OSM_CSV }")
 
-
-if __name__ == "__main__":
-    main()
+if __name__ =="__main__":
+    main ()
